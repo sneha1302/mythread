@@ -28,4 +28,4 @@ $(NAME)debug.o:
 	$(CC) $(CFLAGS) $(NAME).c -c -o $(NAME)debug.o
 
 clean:
-	rm -f $(NAME).o $(NAME).a $(NAME) *debug*
+	rm -f $(NAME).o $(NAME).a $(NAME) *debug* *swp
