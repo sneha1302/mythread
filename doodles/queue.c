@@ -1,0 +1,81 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+#define TRUE 1
+#define FALSE 0
+
+typedef struct Node {
+    int data;
+    struct Node* next;
+} Node;
+
+typedef struct {
+    int length; 
+    Node* head;
+    Node* tail;
+} Queue;
+
+Queue* setup_queue();
+void enqueue(Queue* q, int data);
+int queue_is_empty(Queue* q);
+int queue_length(Queue* q); 
+void print_queue(Queue* q);
+
+int main() {
+
+    Queue* queue = setup_queue();
+    printf("%d\n", queue->length);
+    enqueue(queue, 1);
+    printf("%d\n", queue->length);
+    enqueue(queue, 2);
+    printf("%d\n", queue->length);
+    printf("DEBUG \n");
+    print_queue(queue);
+    free(queue);
+
+    return 0;
+}
+
+Queue* setup_queue() {
+    Queue* to_ret = (Queue*) malloc(sizeof(Queue));
+    to_ret->head = NULL;
+    to_ret->tail = NULL;
+    to_ret->length = 0;
+    return to_ret;
+}
+
+void enqueue(Queue* q, int data) {
+    Node* temp = (Node*) malloc(sizeof(Node));
+    temp->data = data;
+    temp->next = NULL;
+
+    if(queue_is_empty(q)) {
+        q->head = temp;
+        q->tail = temp;
+    }
+    else {
+        q->tail->next = temp;
+        q->tail = temp;
+    }
+    q->length++;
+        
+}
+
+int queue_length(Queue* q) { 
+    return q->length;
+}
+
+int queue_is_empty(Queue* q) {
+    if(queue_length(q) == 0) {
+        return TRUE;
+    }
+    return FALSE;
+}
+
+void print_queue(Queue* q) {
+    Node* temp = q->head;
+    while(temp != NULL) {
+        printf("%d\n", temp->data);
+        temp = temp->next;
+    }
+}
