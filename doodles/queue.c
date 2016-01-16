@@ -20,6 +20,7 @@ void enqueue(Queue* q, int data);
 int queue_is_empty(Queue* q);
 int queue_length(Queue* q); 
 void print_queue(Queue* q);
+int* dequeue(Queue* q);
 
 int main() {
 
@@ -29,7 +30,12 @@ int main() {
     printf("%d\n", queue->length);
     enqueue(queue, 2);
     printf("%d\n", queue->length);
-    printf("DEBUG \n");
+    int* a = dequeue(queue);
+    int* b = dequeue(queue);
+    printf("%d\n", *a);
+    printf("%d\n", *b);
+    
+    
     print_queue(queue);
     free(queue);
 
@@ -59,6 +65,22 @@ void enqueue(Queue* q, int data) {
     }
     q->length++;
         
+}
+
+int* dequeue(Queue* q) {
+    if (queue_is_empty(q)) {
+        return NULL;
+    }
+    /*  */
+    int* data = q->head.data;
+    q->head = q->head->next;
+    /* You do not need to handle 
+     * freeing of the things here
+     * because the thread engine's
+     * respondibility will be to
+     * remove the thread info 
+     * when the thread is done. */
+    return data;
 }
 
 int queue_length(Queue* q) { 
