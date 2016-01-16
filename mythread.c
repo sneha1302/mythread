@@ -2,8 +2,8 @@
 #include <strings.h>
 #include "mythread.h"
 
-void main(int* args) {
-    printf("DALMACIA\n");    
+int  main(int* args) {
+    return 0;
 }
 
 /*
