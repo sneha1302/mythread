@@ -14,7 +14,9 @@ int main(int* args) {
  *
  */
 MyThread MyThreadCreate (void(*start_funct)(void *), void *args){
-
+/*
+ * So in order to make a new thread, we will need to create a new context I 
+ */
 }
 
 /*

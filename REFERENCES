@@ -4,3 +4,8 @@ Making makefiles and archive
 
 Getting an understanding how to begin
 - http://www.evanjones.ca/software/threading.html
+
+Changing context
+- man 2 makecontext
+- man 2 sigaltstack
+- http://stackoverflow.com/questions/18732008/use-swapcontext-or-getcontext-setcontext-to-write-a-yield-function-for

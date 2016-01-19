@@ -29,8 +29,11 @@ void f2() {
 
 
 int main(int argc, char* argv[]) {
-    char* func1_stack = (char*) malloc(STACK_SIZE);
-    char* func2_stack = (char*) malloc(STACK_SIZE);
+    //char* func1_stack = (char*) malloc(STACK_SIZE);
+    //char* func2_stack = (char*) malloc(STACK_SIZE);
+    char func1_stack[STACK_SIZE];
+    char func2_stack[STACK_SIZE];    
+
     
     getcontext(&uctx_func1);
     uctx_func1.uc_stack.ss_sp = func1_stack;
@@ -41,8 +44,7 @@ int main(int argc, char* argv[]) {
     getcontext(&uctx_func2);
     uctx_func2.uc_stack.ss_sp = func2_stack;
     uctx_func2.uc_stack.ss_size = sizeof(func2_stack);
-    uctx_func2.uc_link = (argc > 1) ? NULL : &uctx_func1;
-
+    uctx_func2.uc_link = &uctx_func1;
     makecontext(&uctx_func2, f2, 0);
 
     printf("Main swapping to Function 2\n");
