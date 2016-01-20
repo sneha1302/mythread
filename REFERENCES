@@ -9,3 +9,4 @@ Changing context
 - man 2 makecontext
 - man 2 sigaltstack
 - http://stackoverflow.com/questions/18732008/use-swapcontext-or-getcontext-setcontext-to-write-a-yield-function-for
+- http://www.gnu.org/software/libc/manual/html_node/System-V-contexts.html

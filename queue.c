@@ -1,8 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define TRUE 1
-#define FALSE 0
+
+/*int main() {
+
+    Queue* queue = setup_queue();
+    printf("%d\n", queue->length);
+    enqueue(queue, 1);
+    printf("%d\n", queue->length);
+    enqueue(queue, 2);
+    printf("%d\n", queue->length);
+    int* a = dequeue(queue);
+    int* b = dequeue(queue);
+    printf("%d\n", *a);
+    printf("%d\n", *b);
+    
+    
+    print_queue(queue);
+    free(queue);
+
+    return 0;
+}*/
 
 Queue* setup_queue() {
     Queue* to_ret = (Queue*) malloc(sizeof(Queue));
@@ -12,31 +30,39 @@ Queue* setup_queue() {
     return to_ret;
 }
 
-void enqueue(Queue* q, MyThread* thread) {
+void enqueue(Queue* q, __my_t* t) {
+    Node* temp = (Node*) malloc(sizeof(Node));
+    temp->t = t;
+    temp->next = NULL;
+
     if(queue_is_empty(q)) {
-        q->head = thread;
-        q->tail = thread;
+        q->head = temp;
+        q->tail = temp;
     }
     else {
-        q->tail->next = thread;
-        q->tail = thread;
+        q->tail->next = temp;
+        q->tail = temp;
     }
-    q->length++;   
+    q->length++;
+        
 }
 
-int* dequeue(Queue* q) {
+__my_t* dequeue(Queue* q) {
     if (queue_is_empty(q)) {
         return NULL;
     }
-    MyThread* thread = q->head;
-    q->head = q->head->next;
-    /* You do not need to handle 
-     * freeing of the things here
-     * because the thread engine's
-     * respondibility will be to
-     * remove the thread info 
-     * when the thread is done. */
-    return thread;
+    /*  */
+    //__my_t* t = q->head.t;
+    __my_t* t = (__my_t) malloc(sizeof(__my_t));
+    memcpy(t, q->head.t, sizeof(__my_t));
+    Node* next = q->head->next;
+    free(q->head);
+    q->head = next;
+    q->length = q->length - 1;
+   
+    /* We will need to free the node itself but not the thread.
+     * The node itself has a bit of extra memory used */ 
+    return t;
 }
 
 int queue_length(Queue* q) { 
@@ -48,4 +74,12 @@ int queue_is_empty(Queue* q) {
         return TRUE;
     }
     return FALSE;
+}
+
+void print_queue(Queue* q) {
+    Node* temp = q->head;
+    while(temp != NULL) {
+        printf("%d\n", temp->data);
+        temp = temp->next;
+    }
 }
