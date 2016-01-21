@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <strings.h>
 #include "mythread.h"
-#include "queue.h" /* THIS MUST BE INCLUDED AFTER mythread.h AND NOT BEFORE */
+//#include "queue.h" /* THIS MUST BE INCLUDED AFTER mythread.h AND NOT BEFORE */
 #include <ucontext.h>
 
 unsigned int __get_next_available_tid();
@@ -26,12 +26,10 @@ unsigned int __get_next_available_tid();
  ******************************** TYPEDEFS AND STRUCTS ********************************
  **************************************************************************************/
 typedef struct __my_t {
-    unsigned int tid;                  /* This thread's id */
-    unsigned int ptid;                 /* Parent thread id */
-    struct __my_t* parent;
-    int active;                        /* whether or not it is running or in the wait queue */
-    //unsigned int ct_list[MAX_THREADS]; /* Child thread id list. */
-    __my_t child_list[MAX_THREADS];
+    unsigned int tid;                   /* This thread's id */
+    struct __my_t* parent;              /* Parent thread */
+    int status;                         /* -### waiting on tid ###, 0 done, 1 running, 2 wait for all*/
+    __my_t child_list[MAX_THREADS];     /* list of children processes */
     unsigned int ct_cnt;                /* Child thread count */
     ucontext_t context;                 /* The context of this thread */
 } __my_t
