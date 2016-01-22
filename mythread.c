@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <strings.h>
+#include <stdbool.h>
 #include "mythread.h"
 //#include "queue.h" /* THIS MUST BE INCLUDED AFTER mythread.h AND NOT BEFORE */
 #include <ucontext.h>
@@ -8,17 +8,16 @@ unsigned int __get_next_available_tid();
 /**************************************************************************************
  *************************************** MACROS ***************************************
  **************************************************************************************/
-#ifndef TRUE
-#define TRUE 1
-#endif
-#ifndef FALSE
-#define FALSE 0
-#endif
-#ifndef MAX_THREADS
+
 #define MAX_THREADS 65535 /* The MAX_INT of 32-bit systems just in case */
-#endif
-#ifndef STACK_SIZE 8192
-#endif
+#define MAX_TID 4294967295
+#define STACK_SIZE 8192
+#define EXIT 0
+#define RUN 1
+#define READY 2
+#define WCHLD 3
+#define WALL 4
+
 
 
 
@@ -28,7 +27,7 @@ unsigned int __get_next_available_tid();
 typedef struct __my_t {
     unsigned int tid;                   /* This thread's id */
     struct __my_t* parent;              /* Parent thread */
-    int status;                         /* -### waiting on tid ###, 0 done, 1 running, 2 wait for all*/
+    int status;                         /* -### waiting on tid ### */
     __my_t child_list[MAX_THREADS];     /* list of children processes */
     unsigned int ct_cnt;                /* Child thread count */
     ucontext_t context;                 /* The context of this thread */
@@ -45,7 +44,7 @@ typedef struct __my_t {
  * we go, but the idea is a way for us to keep track of parent ids when jumping vertically in the
  * hierarchy. -1 means the main thread.
  */
- __my_t* invoking_t
+ __my_t * invoking_t
 
 /* READY_Q
  * This queue will house threads that are simply waiting to run. When a thread has yielded, it gets
@@ -53,7 +52,7 @@ typedef struct __my_t {
  * either, the head of this queue will be removed and ran. When I am empty, then the program has
  * finished via MyThreadExit().
  */
-Queue ready_q;
+//Queue ready_q;
 
 /* JOINING_Q
  * This queue will house any threads that are blocking on MyThreadJoin or MyThreadJoinAll
@@ -62,11 +61,14 @@ Queue ready_q;
  * of the child from ct_list and decrement ct_cnt of the thread. If and only if ct_cnt is 0, then
  * the thread can be removed from this queue and queued into the ready queue
  */
-Queue joining_q;
+//Queue joining_q;
 
-__my_t* main_t;
+__my_t * main_t;
 
-unsigned int avail_tids[MAX_THREADS];
+unsigned long avail_tids[MAX_TID];
+unsigned long last_tid = 0;
+__my_t threads[MAX_THREADS];
+unsigned int t_cnt = 0;
 
 /**************************************************************************************
  ************************************* FUNCTIONS **************************************
@@ -94,10 +96,17 @@ MyThread MyThreadCreate (void(*start_funct)(void *), void *args){
     uctx.uc_stack.ss_sp = uctx_stack;
     uctx.uc_stack.ss_size = sizeof(uctx_stack);
     uctx.uc_link = main_t->context;
+    makecontext(&uctx, start_funct, 1, args);
 
     /* Setting up and creating the thread */
-    __my_t* t = (__my_t*) malloc(sizeof(__my_t));
-
+    __my_t * t = (__my_t *) malloc(sizeof(__my_t));
+    t->tid = __get_next_available_tid();
+    t->parent = invoking_t;
+    t->parent->child_list[t->parent->ct_cnt] = t;
+    t->parent->ct_cnt = t->parent->ct_cnt + 1;
+    t->status = READY;
+    t->ct_cnt = 0;
+    t->context = uctx;
 }
 
 /*
@@ -111,7 +120,7 @@ void MyThreadYield(void) {
  * puts thread on join queue and wait for the joining thread to complete
  */
 int MyThreadJoin(MyThread thread){
-
+  return 0
 }
 
 
@@ -126,9 +135,9 @@ void MyThreadJoinAll(void){
  * Exists the thread
  */
 void MyThreadExit(void){
-    free(ready_q);
-    free(joining_q);
-    free(main_t);
+    //free(ready_q);
+    //free(joining_q);
+    //free(main_t);
 }
 
 /*
@@ -169,10 +178,10 @@ void MyThreadInit (void(*start_funct)(void *), void *args){
      */
 
      /* Setting up queues and available tid list */
-    ready_q = setup_queue();
-    joining_q = setup_queue();
+    //ready_q = setup_queue();
+    //joining_q = setup_queue();
     int i;
-    for(i = 0; i < MAX_THREADS; i++) {
+    for(i = 0; i < MAX_TID; i++) {
         avail_tids[i] = TRUE;
     }
     avail_tids[0] = FALSE;
@@ -180,15 +189,14 @@ void MyThreadInit (void(*start_funct)(void *), void *args){
     /* Setting up the main thread. It is unecessary to call makecontext() with
        the main thread as it is already in a function. */
     main_t->tid = 0;
-    main_t->ptid = -1;
+    //main_t->ptid = -1;
     main_t->parent = NULL;
     main_t->active = 0;
     main_t->ct_cnt = 0;
     invoking_t = main_t;
-    getcontext(&main_t->context);
 
     MyThreadCreate(start_funct, args);
-    //MyThreadJoinAll();
+    MyThreadJoinAll();
 }
 
 
@@ -197,9 +205,13 @@ void MyThreadInit (void(*start_funct)(void *), void *args){
 */
 unsigned int __get_next_available_tid() {
     int i;
-    for(i = 1; i < MAX_THREADS; i++) {
+    for(i = last_tid + 1; i != last_tid; i++) {
+      if(i == MAX_TID) {
+        i = 1;
+      }
         if(avail_tids[i] == TRUE) {
             avail_tids[i] == FALSE;
+            last_tid = i;
             return i;
         }
     }

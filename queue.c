@@ -1,71 +1,81 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "queue.h"
 
+/*
+int main() {
 
-/*int main() {
-
+    __my_t* t1 = (__my_t*) malloc(sizeof(__my_t));
+    t1->tid = 100;
+    __my_t* t2 = (__my_t*) malloc(sizeof(__my_t));
+    t2->tid = 200;
     Queue* queue = setup_queue();
     printf("%d\n", queue->length);
-    enqueue(queue, 1);
+    enqueue(queue, t1);
     printf("%d\n", queue->length);
-    enqueue(queue, 2);
+    enqueue(queue, t2);
     printf("%d\n", queue->length);
-    int* a = dequeue(queue);
-    int* b = dequeue(queue);
-    printf("%d\n", *a);
-    printf("%d\n", *b);
-    
-    
+    __my_t* a = dequeue(queue);
+    printf("%d\n", queue->length);
+    __my_t* b = dequeue(queue);
+    printf("%d\n", queue->length);
+    printf("%d\n", a->tid);
+    printf("%d\n", b->tid);
+
+
     print_queue(queue);
-    free(queue);
+    //free(queue);
+    int i;
+    for(i = 0; i < 10; i++) {
+        t1->tid = t1->tid + (10 * i);
+        t2->tid = t2->tid + (10 * i);
+        printf("i: %d\n", i);
+        enqueue(queue, t1);
+        enqueue(queue, t2);
+        a = dequeue(queue);
+        b = dequeue(queue);
+        print_queue(queue);
+        printf("%d\n", a->tid);
+        printf("%d\n", b->tid);
+    }
 
     return 0;
-}*/
+}
+*/
 
 Queue* setup_queue() {
-    Queue* to_ret = (Queue*) malloc(sizeof(Queue));
-    to_ret->head = NULL;
-    to_ret->tail = NULL;
-    to_ret->length = 0;
-    return to_ret;
+    Queue* q = (Queue *) malloc(sizeof(Queue));
+    q->length = 0;
+    q->head = 0;
+    q->tail = 0;
+    return q;
 }
 
 void enqueue(Queue* q, __my_t* t) {
-    Node* temp = (Node*) malloc(sizeof(Node));
-    temp->t = t;
-    temp->next = NULL;
-
     if(queue_is_empty(q)) {
-        q->head = temp;
-        q->tail = temp;
+        q->t_list[q->tail] = t;
     }
     else {
-        q->tail->next = temp;
-        q->tail = temp;
+        q->tail = (q->tail + 1) % MAX_THREADS;
+        q->t_list[q->tail] = t;
     }
     q->length++;
-        
 }
 
 __my_t* dequeue(Queue* q) {
     if (queue_is_empty(q)) {
         return NULL;
     }
-    /*  */
-    //__my_t* t = q->head.t;
-    __my_t* t = (__my_t) malloc(sizeof(__my_t));
-    memcpy(t, q->head.t, sizeof(__my_t));
-    Node* next = q->head->next;
-    free(q->head);
-    q->head = next;
-    q->length = q->length - 1;
-   
-    /* We will need to free the node itself but not the thread.
-     * The node itself has a bit of extra memory used */ 
+    __my_t * t = q->t_list[q->head];
+
+    if(q->head != q->tail) {
+        q->head = (q->head + 1) % MAX_THREADS;
+    }
+    q->length--;
     return t;
 }
 
-int queue_length(Queue* q) { 
+int queue_length(Queue* q) {
     return q->length;
 }
 
@@ -77,9 +87,7 @@ int queue_is_empty(Queue* q) {
 }
 
 void print_queue(Queue* q) {
-    Node* temp = q->head;
-    while(temp != NULL) {
-        printf("%d\n", temp->data);
-        temp = temp->next;
-    }
+    printf("Head: %d\n", q->head);
+    printf("Tail: %d\n", q->tail);
+    printf("Length: %d\n", q->length);
 }
