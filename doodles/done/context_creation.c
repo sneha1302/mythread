@@ -32,9 +32,9 @@ int main(int argc, char* argv[]) {
     //char* func1_stack = (char*) malloc(STACK_SIZE);
     //char* func2_stack = (char*) malloc(STACK_SIZE);
     char func1_stack[STACK_SIZE];
-    char func2_stack[STACK_SIZE];    
+    char func2_stack[STACK_SIZE];
 
-    
+
     getcontext(&uctx_func1);
     uctx_func1.uc_stack.ss_sp = *func1_stack;
     uctx_func1.uc_stack.ss_size = sizeof(func1_stack);

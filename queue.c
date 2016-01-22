@@ -86,6 +86,16 @@ int queue_is_empty(Queue* q) {
     return FALSE;
 }
 
+__my_t* remove(Queue* q, unsigned int tid) {
+    __my_t* t = dequeue(q);
+    while(t->tid != tid) {
+        enqueue(q, t);
+        t = dequeue(q);
+    }
+    return t;
+}
+
+
 void print_queue(Queue* q) {
     printf("Head: %d\n", q->head);
     printf("Tail: %d\n", q->tail);

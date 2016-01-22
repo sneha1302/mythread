@@ -25,7 +25,7 @@
 typedef void *MyThread;
 typedef void *MySemaphore;
 
-// ****** THREAD OPERATIONS ****** 
+// ****** THREAD OPERATIONS ******
 // Create a new thread.
 MyThread MyThreadCreate(void(*start_funct)(void *), void *args);
 
@@ -41,7 +41,7 @@ void MyThreadJoinAll(void);
 // Terminate invoking thread
 void MyThreadExit(void);
 
-// ****** SEMAPHORE OPERATIONS ****** 
+// ****** SEMAPHORE OPERATIONS ******
 // Create a semaphore
 MySemaphore MySemaphoreInit(int initialValue);
 
@@ -54,7 +54,7 @@ void MySemaphoreWait(MySemaphore sem);
 // Destroy on a semaphore
 int MySemaphoreDestroy(MySemaphore sem);
 
-// ****** CALLS ONLY FOR UNIX PROCESS ****** 
+// ****** CALLS ONLY FOR UNIX PROCESS ******
 // Create and run the "main" thread
 void MyThreadInit(void(*start_funct)(void *), void *args);
 

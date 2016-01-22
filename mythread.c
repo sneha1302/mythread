@@ -17,6 +17,7 @@ unsigned int __get_next_available_tid();
 #define READY 2
 #define WCHLD 3
 #define WALL 4
+#define MAIN_TID 0
 
 
 
@@ -31,6 +32,7 @@ typedef struct __my_t {
     __my_t child_list[MAX_THREADS];     /* list of children processes */
     unsigned int ct_cnt;                /* Child thread count */
     ucontext_t context;                 /* The context of this thread */
+    unsigned int wc_tid;                /* tid child thread we wait on if waiting on a single child */
 } __my_t
 
 
@@ -38,13 +40,13 @@ typedef struct __my_t {
 /**************************************************************************************
  ********************************** GLOBAL VARIABLES **********************************
  **************************************************************************************/
-/* INVOKING_T
+/* current_T
  * After MyThreadInit, we will need to keep track of which threads put us back in this library. To
  * do so, we will simply assign it the "current" tid whenever we yield. May need to modify this as
  * we go, but the idea is a way for us to keep track of parent ids when jumping vertically in the
  * hierarchy. -1 means the main thread.
  */
- __my_t * invoking_t
+ __my_t* current_t;
 
 /* READY_Q
  * This queue will house threads that are simply waiting to run. When a thread has yielded, it gets
@@ -52,7 +54,7 @@ typedef struct __my_t {
  * either, the head of this queue will be removed and ran. When I am empty, then the program has
  * finished via MyThreadExit().
  */
-//Queue ready_q;
+ Queue* ready_q;
 
 /* JOINING_Q
  * This queue will house any threads that are blocking on MyThreadJoin or MyThreadJoinAll
@@ -61,9 +63,9 @@ typedef struct __my_t {
  * of the child from ct_list and decrement ct_cnt of the thread. If and only if ct_cnt is 0, then
  * the thread can be removed from this queue and queued into the ready queue
  */
-//Queue joining_q;
+Queue* joining_q;
 
-__my_t * main_t;
+__my_t* main_t;
 
 unsigned long avail_tids[MAX_TID];
 unsigned long last_tid = 0;
@@ -95,18 +97,21 @@ MyThread MyThreadCreate (void(*start_funct)(void *), void *args){
     getcontext(&uctx);
     uctx.uc_stack.ss_sp = uctx_stack;
     uctx.uc_stack.ss_size = sizeof(uctx_stack);
-    uctx.uc_link = main_t->context;
+    uctx.uc_link = NULL;
     makecontext(&uctx, start_funct, 1, args);
 
     /* Setting up and creating the thread */
     __my_t * t = (__my_t *) malloc(sizeof(__my_t));
     t->tid = __get_next_available_tid();
-    t->parent = invoking_t;
+    t->parent = current_t;
     t->parent->child_list[t->parent->ct_cnt] = t;
     t->parent->ct_cnt = t->parent->ct_cnt + 1;
     t->status = READY;
     t->ct_cnt = 0;
     t->context = uctx;
+
+    enqueue(ready_q, t);
+    return (MyThread) t;
 }
 
 /*
@@ -125,7 +130,9 @@ int MyThreadJoin(MyThread thread){
 
 
 void MyThreadJoinAll(void){
+    while(current_t->ct_cnt != 0) {
 
+    }
     /* This will loop in a while loop yielding until it's ct_cnt is 0
     */
     return; //will change once implemented
@@ -135,9 +142,42 @@ void MyThreadJoinAll(void){
  * Exists the thread
  */
 void MyThreadExit(void){
-    //free(ready_q);
-    //free(joining_q);
-    //free(main_t);
+    /* Terminates the invoking thread. Note: all MyThreads are required to invoke
+     * this function. Do not allow functions to “fall out” of the start function
+     *
+     * PSEUDO CODE
+     * - Remove us from the parent list of child threads and decrement ct_cnt
+     * - Free the tid for use elsewhere
+     * - Check if the parent still exists. If not, then just leave
+     * - Else check if parent is in WCHLD, moving it to ready if
+     * - Free?
+     */
+    if(current_t->tid == MAIN_TID) {
+        return;
+    }
+
+
+
+    /* Remove itself from the parent's list of children */
+    int i;
+    for(i = 0; i < current_t->parent->ct_cnt; i++) {
+        __my_t* ct = current_t->parent->child_list[i];
+        if(ct != NULL && ct->tid == current_t->tid) {
+            current_t->parent->child_list[i] = NULL;
+            current_t->parent->ct_cnt--;
+        }
+    }
+
+    /* Free the tid for use elsewhere */
+    avail_tids[current_t->tid] = TRUE;
+
+    /* if the parent no longer has children, and if it is WCHLD,
+       then queue parent in ready */
+    if(current_t->parent->status == WCHLD &&
+       current_t->parent->wc_tid == current_t->tid) {
+           remove(joining_q, current_t->parent->tid);
+           enqueue(ready_q, current_t->parent);
+       }
 }
 
 /*
@@ -193,7 +233,8 @@ void MyThreadInit (void(*start_funct)(void *), void *args){
     main_t->parent = NULL;
     main_t->active = 0;
     main_t->ct_cnt = 0;
-    invoking_t = main_t;
+    main_t->wc_tid = -1
+    current_t = main_t;
 
     MyThreadCreate(start_funct, args);
     MyThreadJoinAll();

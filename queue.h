@@ -7,12 +7,6 @@
 #define FALSE 0
 #endif
 
-typedef struct __my_t {
-    int tid;
-} __my_t;
-
-#define MAX_THREADS 3
-
 typedef struct Queue {
     __my_t * t_list[MAX_THREADS];
     unsigned int length;
@@ -26,3 +20,4 @@ int queue_is_empty(Queue* q);
 int queue_length(Queue* q);
 void print_queue(Queue* q);
 __my_t* dequeue(Queue* q);
+__my_t* remove(Queue* q, unsigned int tid);
