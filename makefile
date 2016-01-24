@@ -9,10 +9,13 @@ NAME = mythread
 
 all: lib
 
-lib: $(NAME).o
-	ar -q $(NAME).a $(NAME).o
+lib: $(NAME).o mystuff.o
+	ar -q $(NAME).a $(NAME).o mystuff.o
 
-$(NAME).o: $(NAME).h $(NAME).c
+mystuff.o: mystuff.h mystuff.c 
+	$(CC) mystuff.c -c
+
+$(NAME).o: $(NAME).h $(NAME).c 
 	$(CC) $(NAME).c -c 
 
 
@@ -28,4 +31,4 @@ $(NAME)debug.o:
 	$(CC) $(CFLAGS) $(NAME).c -c -o $(NAME)debug.o
 
 clean:
-	rm -f $(NAME).o $(NAME).a $(NAME) *debug* *swp
+	rm -f *.o *.a $(NAME) *debug* *swp

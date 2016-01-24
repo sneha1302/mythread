@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "queue.h"
+#include "mystuff.h"
 
+/*
 int main() {
 
     __my_t* t1 = (__my_t*) malloc(sizeof(__my_t));
@@ -38,6 +39,7 @@ int main() {
         printf("NULL");
     }
     print_queue(queue);
+    */
     //free(queue);
     /*
     int i;
@@ -53,9 +55,9 @@ int main() {
         printf("%d\n", a->tid);
         printf("%d\n", b->tid);
     }
-    */
     return 0;
 }
+    */
 
 
 Queue* setup_queue() {
@@ -81,7 +83,7 @@ __my_t* dequeue(Queue* q) {
     if (queue_is_empty(q)) {
         return NULL;
     }
-    __my_t * t = q->t_list[q->head];
+    __my_t* t = q->t_list[q->head];
 
     if(q->head != q->tail) {
         q->head = (q->head + 1) % MAX_THREADS;

@@ -1,39 +1,10 @@
 #include <stdio.h>
-#include <stdbool.h>
+//#include <stdbool.h>
+//#include <ucontext.h>
+#include <stdlib.h>
 #include "mythread.h"
-//#include "queue.h" /* THIS MUST BE INCLUDED AFTER mythread.h AND NOT BEFORE */
-#include <ucontext.h>
+#include "mystuff.h" /* THIS MUST BE INCLUDED AFTER mythread.h AND NOT BEFORE */
 
-unsigned int __get_next_available_tid();
-/**************************************************************************************
- *************************************** MACROS ***************************************
- **************************************************************************************/
-
-#define MAX_THREADS 65535   /* The MAX_INT of 32-bit systems just in case */
-#define MAX_TID 4294967295  /* max int for 32 bit systems */
-#define STACK_SIZE 8192     /* 8 KiB, used for the length of arrays */
-#define EXIT 0          /* When a process has exited */
-#define RUN 1           /* When currently running */
-#define READY 2         /* When waiting in the runq */
-#define WCHLD 3         /* When waiting on a specific child */
-#define WALL 4          /* When waiting for all */
-#define MAIN_TID 0      /* Thread ID of the main thread */
-
-
-
-
-/**************************************************************************************
- ******************************** TYPEDEFS AND STRUCTS ********************************
- **************************************************************************************/
-typedef struct __my_t {
-    unsigned int tid;                   /* This thread's id */
-    struct __my_t* parent;              /* Parent thread */
-    int status;                         /* -### waiting on tid ### */
-    __my_t child_list[MAX_THREADS];     /* list of children processes */
-    unsigned int ct_cnt;                /* Child thread count */
-    ucontext_t context;                 /* The context of this thread */
-    unsigned int wc_tid;                /* tid child thread we wait on if waiting on a single child */
-} __my_t;
 
 
 /**************************************************************************************
@@ -45,30 +16,29 @@ typedef struct __my_t {
  * we go, but the idea is a way for us to keep track of parent ids when jumping vertically in the
  * hierarchy. -1 means the main thread.
  */
- __my_t current_t;
+ __my_t* current_t;
 
-/* READY_Q
+/* runq
  * This queue will house threads that are simply waiting to run. When a thread has yielded, it gets
  * queued here. If a thread terminates, then nothing happens with the terminating thread. After
  * either, the head of this queue will be removed and ran. When I am empty, then the program has
  * finished via MyThreadExit().
  */
- Queue* ready_q;
+ Queue* runq;
 
-/* JOINING_Q
+/* waitq
  * This queue will house any threads that are blocking on MyThreadJoin or MyThreadJoinAll
  * When either are called, the thread waiting_thread will be queued. When a thread exists, we will
  * need to check for its parent in here. If it exists in here, then we will need to remove the tid
  * of the child from ct_list and decrement ct_cnt of the thread. If and only if ct_cnt is 0, then
  * the thread can be removed from this queue and queued into the ready queue
  */
-Queue* joining_q;
+Queue* waitq;
 
-__my_t main_t;
-
+__my_t* main_t;
+__my_t* invoking_t;
 unsigned long avail_tids[MAX_TID];
 unsigned long last_tid = 0;
-__my_t threads[MAX_THREADS];
 unsigned int t_cnt = 0;
 
 /**************************************************************************************
@@ -91,20 +61,23 @@ MyThread MyThreadCreate (void(*start_funct)(void *), void *args){
  */
 
     /* Don't make another thread if we have too many! */
-    if(ready_q->length == MAX_THREADS) {
+    if(runq->length == MAX_THREADS) {
         return NULL;
     }
 
     /* Setting up and creating the context */
     char uctx_stack[STACK_SIZE];
     ucontext_t uctx;
+    printf("DEBUG: HERE I AM\n");
     getcontext(&uctx);
     uctx.uc_stack.ss_sp = uctx_stack;
     uctx.uc_stack.ss_size = sizeof(uctx_stack);
-    uctx.uc_link = NULL;
+    uctx.uc_link = &(main_t->context);
     makecontext(&uctx, start_funct, 1, args);
 
+    printf("DEBUG: Created context\n");
     /* Setting up and creating the thread */
+
     __my_t* t = (__my_t*) malloc(sizeof(__my_t));
     t->tid = __get_next_available_tid();
     t->parent = current_t;
@@ -114,7 +87,9 @@ MyThread MyThreadCreate (void(*start_funct)(void *), void *args){
     t->ct_cnt = 0;
     t->context = uctx;
 
-    enqueue(ready_q, t);
+    printf("DEBUG: Created thread\n");
+    enqueue(runq, t);
+    printf("DEBUG: Queued thread\n");
     return (MyThread) t;
 }
 
@@ -125,24 +100,39 @@ void MyThreadYield(void) {
 
 }
 
+
+
+
 /*
  * puts thread on join queue and wait for the joining thread to complete
  */
 int MyThreadJoin(MyThread thread){
-  return 0
+  return 0;
 }
 
 
+
+
 void MyThreadJoinAll(void){
-    while(ready_q->length != 0) {
-        current_q = dequeue(ready_q);
-        if(current_q == NULL) {
+    printf("DEBUG: entered JoinAll\n");
+    current_t->status = WALL;
+    enqueue(waitq, current_t);
+    invoking_t = current_t;
+    printf("DEBUG: Queued the current thread %d\n", current_t->tid);
+    while(!queue_is_empty(runq)) {
+        current_t = dequeue(runq);
+        if(current_t == NULL) {
+            current_t = main_t;
             break; // SANITY CHECK ONLY we should never hit this
         }
-        swapcontext(
+        printf("DEBUG: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
+        swapcontext(&(invoking_t->context), &(current_t->context));
+        if(current_t->status == EXIT) {
+            free(current_t);
+        }
     }
-    /* This will loop in a while loop yielding until it's ct_cnt is 0
-    */
+
+    /* Clean up! */
     return; //will change once implemented
 }
 
@@ -160,32 +150,39 @@ void MyThreadExit(void){
      * - Else check if parent is in WCHLD, moving it to ready if
      * - Free?
      */
+    printf("DEBUG: entered Exit \n");
     if(current_t->tid == MAIN_TID) {
         return;
     }
 
 
-
+    __my_t* parent = current_t->parent;
     /* Remove itself from the parent's list of children */
     int i;
-    for(i = 0; i < current_t->parent->ct_cnt; i++) {
-        __my_t* ct = current_t->parent->child_list[i];
+    for(i = 0; i < parent->ct_cnt; i++) {
+        __my_t* ct = parent->child_list[i];
         if(ct != NULL && ct->tid == current_t->tid) {
-            current_t->parent->child_list[i] = NULL;
-            current_t->parent->ct_cnt--;
+            parent->child_list[i] = NULL;
+            parent->ct_cnt--;
+            break;
         }
     }
-
+    printf("DEBUG: Removed myself from parent \n");
     /* Free the tid for use elsewhere */
     avail_tids[current_t->tid] = TRUE;
 
     /* if the parent no longer has children, and if it is WCHLD,
        then queue parent in ready */
-    if(current_t->parent->status == WCHLD &&
-       current_t->parent->wc_tid == current_t->tid) {
-           remove(joining_q, current_t->parent->tid);
-           enqueue(ready_q, current_t->parent);
-       }
+
+    if(parent->status == WCHLD && parent->wc_tid == current_t->tid ||
+       parent->status == WALL && parent->ct_cnt == 0) {
+           remove_from_queue(waitq, parent->tid);
+           parent->status = READY;
+           enqueue(runq, parent);
+    }
+    printf("DEBUG: SWAPPING!!! %d -> %d\n", current_t->tid, main_t->tid);
+    current_t->status = EXIT;
+    swapcontext(&(current_t->context), &(main_t->context));
 }
 
 /*
@@ -226,8 +223,8 @@ void MyThreadInit (void(*start_funct)(void *), void *args){
      */
 
      /* Setting up queues and available tid list */
-    //ready_q = setup_queue();
-    //joining_q = setup_queue();
+    //runq = setup_queue();
+    //waitq = setup_queue();
     int i;
     for(i = 0; i < MAX_TID; i++) {
         avail_tids[i] = TRUE;
@@ -236,16 +233,24 @@ void MyThreadInit (void(*start_funct)(void *), void *args){
 
     /* Setting up the main thread. It is unecessary to call makecontext() with
        the main thread as it is already in a function. */
+    main_t = (__my_t*) malloc(sizeof(__my_t));
     main_t->tid = 0;
     //main_t->ptid = -1;
     main_t->parent = NULL;
-    main_t->active = 0;
+    main_t->status = READY;
     main_t->ct_cnt = 0;
-    main_t->wc_tid = -1
+    main_t->wc_tid = -1;
     current_t = main_t;
 
+    runq = setup_queue();
+    waitq = setup_queue();
+    printf("DEBUG: Created main_t\n");
     MyThreadCreate(start_funct, args);
     MyThreadJoinAll();
+
+    free(runq);
+    free(waitq);
+    free(main_t);
 }
 
 
@@ -259,7 +264,7 @@ unsigned int __get_next_available_tid() {
         i = 1;
       }
         if(avail_tids[i] == TRUE) {
-            avail_tids[i] == FALSE;
+            avail_tids[i] = FALSE;
             last_tid = i;
             return i;
         }
