@@ -97,7 +97,18 @@ MyThread MyThreadCreate (void(*start_funct)(void *), void *args){
  * Puts the thread back on the wait queue
  */
 void MyThreadYield(void) {
-
+    printf("DEBUG: Entered Yield\n");
+    current_t->status = READY;
+    enqueue(runq, current_t);
+    invoking_t = current_t;
+    printf("DEBUG: Yield: Queued the current thread %d\n", current_t->tid);
+    current_t = dequeue(runq); 
+    if(current_t == NULL) {
+        current_t = main_t;
+        break; // SANITY CHECK ONLY we should never hit this
+    }
+    printf("DEBUG: Yield: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
+    swapcontext(&(invoking_t->context), &(current_t->context));
 }
 
 
@@ -107,7 +118,43 @@ void MyThreadYield(void) {
  * puts thread on join queue and wait for the joining thread to complete
  */
 int MyThreadJoin(MyThread thread){
-  return 0;
+
+    /* Need to first determine if the current thread even has thread as a child */
+    printf("DEBUG: Entered Join\n");
+    __my_t* requested_t = (__my_t*) thread;
+    int i;
+    int found = FALSE; 
+    __my_t* child_t;
+    for(i = 0; i < current_t->ct_cnt; i++) {
+        child_t = current_t->child_list[i];
+        if(requested_t->tid == child_t->tid) {
+            found = TRUE;
+            break;
+        }
+    }
+
+    if(!found) {
+        printf("DEBUG: Join: Did not find child\n");
+        return -1;
+    }
+    printf("DEBUG: Join: Found child\n");
+    /* Reaching here means current_t is a parent of thread */
+
+    current_t->status = WCHLD;
+    current_t->wc_tid = requested_t->tid;
+    enqueue(waitq, current_t);
+    invoking_t = current_t;
+    printf("DEBUG: Join: Queued the current thread to waitq %d\n to wait on %d\n", current_t->tid, requested_t->tid);
+    current_t = dequeue(runq); 
+    if(current_t == NULL) {
+        printf("DEBUG: Join: 149, current_t was NULL!\n");
+        exit(1);
+        current_t = main_t;
+        break; // SANITY CHECK ONLY we should never hit this
+    }
+    printf("DEBUG: Yield: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
+    swapcontext(&(invoking_t->context), &(current_t->context));
+    return 0;
 }
 
 
