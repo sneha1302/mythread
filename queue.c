@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include "queue.h"
 
-/*
 int main() {
 
     __my_t* t1 = (__my_t*) malloc(sizeof(__my_t));
@@ -21,10 +20,26 @@ int main() {
     printf("%d\n", queue->length);
     printf("%d\n", a->tid);
     printf("%d\n", b->tid);
-
+    enqueue(queue, t1);
+    enqueue(queue, t2);
+    __my_t* t3 = (__my_t*) malloc(sizeof(__my_t));
+    t3->tid = 300;
+    enqueue(queue, t3);
 
     print_queue(queue);
+    __my_t* c = remove_from_queue(queue, 300);
+    printf("%d\n", c->tid);
+    a = remove_from_queue(queue, 100);
+    printf("%d\n", a->tid);
+    b = remove_from_queue(queue, 200);
+    printf("%d\n", b->tid);
+    __my_t* d = remove_from_queue(queue, 10000);
+    if(d == NULL) {
+        printf("NULL");
+    }
+    print_queue(queue);
     //free(queue);
+    /*
     int i;
     for(i = 0; i < 10; i++) {
         t1->tid = t1->tid + (10 * i);
@@ -38,10 +53,10 @@ int main() {
         printf("%d\n", a->tid);
         printf("%d\n", b->tid);
     }
-
+    */
     return 0;
 }
-*/
+
 
 Queue* setup_queue() {
     Queue* q = (Queue *) malloc(sizeof(Queue));
@@ -86,8 +101,11 @@ int queue_is_empty(Queue* q) {
     return FALSE;
 }
 
-__my_t* remove(Queue* q, unsigned int tid) {
+__my_t* remove_from_queue(Queue* q, unsigned int tid) {
     __my_t* t = dequeue(q);
+    if(t == NULL) {
+        return NULL;
+    }
     while(t->tid != tid) {
         enqueue(q, t);
         t = dequeue(q);

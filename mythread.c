@@ -9,15 +9,15 @@ unsigned int __get_next_available_tid();
  *************************************** MACROS ***************************************
  **************************************************************************************/
 
-#define MAX_THREADS 65535 /* The MAX_INT of 32-bit systems just in case */
-#define MAX_TID 4294967295
-#define STACK_SIZE 8192
-#define EXIT 0
-#define RUN 1
-#define READY 2
-#define WCHLD 3
-#define WALL 4
-#define MAIN_TID 0
+#define MAX_THREADS 65535   /* The MAX_INT of 32-bit systems just in case */
+#define MAX_TID 4294967295  /* max int for 32 bit systems */
+#define STACK_SIZE 8192     /* 8 KiB, used for the length of arrays */
+#define EXIT 0          /* When a process has exited */
+#define RUN 1           /* When currently running */
+#define READY 2         /* When waiting in the runq */
+#define WCHLD 3         /* When waiting on a specific child */
+#define WALL 4          /* When waiting for all */
+#define MAIN_TID 0      /* Thread ID of the main thread */
 
 
 
@@ -33,8 +33,7 @@ typedef struct __my_t {
     unsigned int ct_cnt;                /* Child thread count */
     ucontext_t context;                 /* The context of this thread */
     unsigned int wc_tid;                /* tid child thread we wait on if waiting on a single child */
-} __my_t
-
+} __my_t;
 
 
 /**************************************************************************************
@@ -46,7 +45,7 @@ typedef struct __my_t {
  * we go, but the idea is a way for us to keep track of parent ids when jumping vertically in the
  * hierarchy. -1 means the main thread.
  */
- __my_t* current_t;
+ __my_t current_t;
 
 /* READY_Q
  * This queue will house threads that are simply waiting to run. When a thread has yielded, it gets
@@ -65,7 +64,7 @@ typedef struct __my_t {
  */
 Queue* joining_q;
 
-__my_t* main_t;
+__my_t main_t;
 
 unsigned long avail_tids[MAX_TID];
 unsigned long last_tid = 0;
@@ -91,6 +90,11 @@ MyThread MyThreadCreate (void(*start_funct)(void *), void *args){
  * - Assign tid and ptid active ct_cnt ct_list OR the parent pointer and child list
  */
 
+    /* Don't make another thread if we have too many! */
+    if(ready_q->length == MAX_THREADS) {
+        return NULL;
+    }
+
     /* Setting up and creating the context */
     char uctx_stack[STACK_SIZE];
     ucontext_t uctx;
@@ -101,7 +105,7 @@ MyThread MyThreadCreate (void(*start_funct)(void *), void *args){
     makecontext(&uctx, start_funct, 1, args);
 
     /* Setting up and creating the thread */
-    __my_t * t = (__my_t *) malloc(sizeof(__my_t));
+    __my_t* t = (__my_t*) malloc(sizeof(__my_t));
     t->tid = __get_next_available_tid();
     t->parent = current_t;
     t->parent->child_list[t->parent->ct_cnt] = t;
@@ -130,8 +134,12 @@ int MyThreadJoin(MyThread thread){
 
 
 void MyThreadJoinAll(void){
-    while(current_t->ct_cnt != 0) {
-
+    while(ready_q->length != 0) {
+        current_q = dequeue(ready_q);
+        if(current_q == NULL) {
+            break; // SANITY CHECK ONLY we should never hit this
+        }
+        swapcontext(
     }
     /* This will loop in a while loop yielding until it's ct_cnt is 0
     */
