@@ -125,9 +125,13 @@ void MyThreadJoinAll(void){
             current_t = main_t;
             break; // SANITY CHECK ONLY we should never hit this
         }
-        printf("DEBUG: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
+        else if(current_t->tid == MAIN_TID && queue_is_empty(runq)) {
+            return;
+        }
+        printf("DEBUG: joinAll SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
         swapcontext(&(invoking_t->context), &(current_t->context));
         if(current_t->status == EXIT) {
+            printf("DEBUG: Removing thread %d within thread %d\n", current_t->tid, invoking_t->tid);
             free(current_t);
         }
     }
@@ -247,6 +251,7 @@ void MyThreadInit (void(*start_funct)(void *), void *args){
     printf("DEBUG: Created main_t\n");
     MyThreadCreate(start_funct, args);
     MyThreadJoinAll();
+    printf("DEBUG: Goodbye! :D\n");
 
     free(runq);
     free(waitq);
