@@ -155,7 +155,7 @@ int MyThreadJoin(MyThread thread){
         exit(1);
         // SANITY CHECK ONLY we should never hit this
     }
-    printf("DEBUG: Yield: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
+    printf("DEBUG: Join: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
     swapcontext(&(invoking_t->context), &(current_t->context));
     return 0;
 }
@@ -217,12 +217,12 @@ void MyThreadExit(void){
     for(i = 0; i < parent->ct_cnt; i++) {
         __my_t* ct = parent->child_list[i];
         if(ct != NULL && ct->tid == current_t->tid) {
+            printf("DEBUG: Removed myself (%d) from parent (%d)\n", current_t->tid, parent->tid);
             parent->child_list[i] = NULL;
             parent->ct_cnt--;
             break;
         }
     }
-    printf("DEBUG: Removed myself from parent \n");
     /* Free the tid for use elsewhere */
     avail_tids[current_t->tid] = TRUE;
 
