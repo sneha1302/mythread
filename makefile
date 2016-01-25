@@ -24,11 +24,17 @@ $(NAME).o: $(NAME).h $(NAME).c
 #
 debug: debug-lib
 
-debug-lib: $(NAME)debug.o
-	ar -cvq $(NAME)debug.a $(NAME)debug.o
+debug-lib: $(NAME)debug.o mystuffdebug.o
+	ar -cvq $(NAME)debug.a $(NAME)debug.o mystuffdebug.o
 
-$(NAME)debug.o:
+mystuffdebug.o: mystuff.h mystuff.c
+	$(CC) $(CFLAGS) mystuff.c -c -o mystuffdebug.o
+
+$(NAME)debug.o: $(NAME).h $(NAME).c
 	$(CC) $(CFLAGS) $(NAME).c -c -o $(NAME)debug.o
 
+
+
 clean:
-	rm -f *.o *.a $(NAME) *debug* *swp
+	rm -f *.o *.a $(NAME) *debug* *swp a.out
+	

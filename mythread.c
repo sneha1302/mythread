@@ -104,8 +104,9 @@ void MyThreadYield(void) {
     printf("DEBUG: Yield: Queued the current thread %d\n", current_t->tid);
     current_t = dequeue(runq); 
     if(current_t == NULL) {
+        printf("DEBUG: Yield: FOUND NULL FROM RUNQ\n");
         current_t = main_t;
-        break; // SANITY CHECK ONLY we should never hit this
+        exit(1); // SANITY CHECK ONLY we should never hit this
     }
     printf("DEBUG: Yield: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
     swapcontext(&(invoking_t->context), &(current_t->context));
@@ -147,10 +148,9 @@ int MyThreadJoin(MyThread thread){
     printf("DEBUG: Join: Queued the current thread to waitq %d\n to wait on %d\n", current_t->tid, requested_t->tid);
     current_t = dequeue(runq); 
     if(current_t == NULL) {
-        printf("DEBUG: Join: 149, current_t was NULL!\n");
+        printf("DEBUG: Join: FOUND NULL FROM RUNQ!\n");
         exit(1);
-        current_t = main_t;
-        break; // SANITY CHECK ONLY we should never hit this
+        // SANITY CHECK ONLY we should never hit this
     }
     printf("DEBUG: Yield: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
     swapcontext(&(invoking_t->context), &(current_t->context));
@@ -169,6 +169,7 @@ void MyThreadJoinAll(void){
     while(!queue_is_empty(runq)) {
         current_t = dequeue(runq);
         if(current_t == NULL) {
+            printf("DEBUG: JoinAll: FOUND NULL FROM RUNQ!\n");
             current_t = main_t;
             break; // SANITY CHECK ONLY we should never hit this
         }
