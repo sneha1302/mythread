@@ -36,14 +36,18 @@ int main(int argc, char* argv[]) {
 
 
     getcontext(&uctx_func1);
-    uctx_func1.uc_stack.ss_sp = *func1_stack;
-    uctx_func1.uc_stack.ss_size = sizeof(func1_stack);
+    //uctx_func1.uc_stack.ss_sp = func1_stack;
+    //uctx_func1.uc_stack.ss_size = sizeof(func1_stack);
+    uctx_func1.uc_stack.ss_sp = malloc(STACK_SIZE);
+    uctx_func1.uc_stack.ss_size = STACK_SIZE;
     uctx_func1.uc_link = &uctx_main;
     makecontext(&uctx_func1, f1, 0);
 
     getcontext(&uctx_func2);
-    uctx_func2.uc_stack.ss_sp = func2_stack;
-    uctx_func2.uc_stack.ss_size = sizeof(func2_stack);
+    //uctx_func2.uc_stack.ss_sp = func2_stack;
+    //uctx_func2.uc_stack.ss_size = sizeof(func2_stack);
+    uctx_func2.uc_stack.ss_sp = malloc(STACK_SIZE);
+    uctx_func2.uc_stack.ss_size = STACK_SIZE;
     uctx_func2.uc_link = &uctx_func1;
     makecontext(&uctx_func2, f2, 0);
 

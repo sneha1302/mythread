@@ -66,12 +66,14 @@ MyThread MyThreadCreate (void(*start_funct)(void *), void *args){
     }
 
     /* Setting up and creating the context */
-    char uctx_stack[STACK_SIZE];
+    //char uctx_stack[STACK_SIZE];
     ucontext_t uctx;
     printf("DEBUG: HERE I AM\n");
     getcontext(&uctx);
-    uctx.uc_stack.ss_sp = uctx_stack;
-    uctx.uc_stack.ss_size = sizeof(uctx_stack);
+    //uctx.uc_stack.ss_sp = uctx_stack;
+    uctx.uc_stack.ss_sp = malloc(STACK_SIZE);
+    //uctx.uc_stack.ss_size = sizeof(uctx_stack);
+    uctx.uc_stack.ss_size = STACK_SIZE;
     uctx.uc_link = &(main_t->context);
     makecontext(&uctx, start_funct, 1, args);
 
@@ -108,6 +110,7 @@ void MyThreadYield(void) {
         current_t = main_t;
         exit(1); // SANITY CHECK ONLY we should never hit this
     }
+
     printf("DEBUG: Yield: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
     swapcontext(&(invoking_t->context), &(current_t->context));
 }
