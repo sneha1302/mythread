@@ -75,7 +75,6 @@ MyThread MyThreadCreate (void(*start_funct)(void *), void *args){
     /* Setting up and creating the context */
     //char uctx_stack[STACK_SIZE];
     ucontext_t uctx;
-    printf("DEBUG: HERE I AM\n");
     getcontext(&uctx);
     //uctx.uc_stack.ss_sp = uctx_stack;
     uctx.uc_stack.ss_sp = malloc(STACK_SIZE);
@@ -84,21 +83,25 @@ MyThread MyThreadCreate (void(*start_funct)(void *), void *args){
     uctx.uc_link = &(main_t->context);
     makecontext(&uctx, start_funct, 1, args);
 
-    printf("DEBUG: Created context\n");
     /* Setting up and creating the thread */
 
     __my_t* t = (__my_t*) malloc(sizeof(__my_t));
     t->tid = __get_next_available_tid();
     t->parent = current_t;
-    t->parent->child_list[t->parent->ct_cnt] = t;
+    int i;
+    for(i = 0; i < MAX_THREADS; i++) {
+        if(t->parent->child_list[i] == NULL) {
+            t->parent->child_list[i] = t;
+            break;
+        }
+    }
     t->parent->ct_cnt = t->parent->ct_cnt + 1;
     t->status = READY;
     t->ct_cnt = 0;
     t->context = uctx;
+    clear_array(t);
 
-    printf("DEBUG: Created thread\n");
     enqueue(runq, t);
-    printf("DEBUG: Queued thread\n");
     return (MyThread) t;
 }
 
@@ -136,9 +139,9 @@ int MyThreadJoin(MyThread thread){
     int i;
     int found = FALSE; 
     __my_t* child_t;
-    for(i = 0; i < current_t->ct_cnt; i++) {
+    for(i = 0; i < MAX_THREADS; i++) {
         child_t = current_t->child_list[i];
-        if(requested_t->tid == child_t->tid) {
+        if(child_t != NULL && requested_t->tid == child_t->tid) {
             found = TRUE;
             break;
         }
@@ -230,7 +233,6 @@ void MyThreadExit(void){
         return;
     }
 
-
     __my_t* parent = current_t->parent;
     int i;
     if(parent != NULL) {
@@ -254,13 +256,9 @@ void MyThreadExit(void){
     }
     
 
-    if(!queue_is_empty(runq)) {
-        remove_refs(runq, current_t);
-    }
+    printf("DEBUG: Exit: cleaned up parental references\n");
+    remove_refs(current_t);
     printf("DEBUG: Exit: Removed refs\n");
-    if(!queue_is_empty(waitq)) {
-        remove_refs(waitq, current_t);
-    }
     /* Free the tid for use elsewhere */
     avail_tids[current_t->tid] = TRUE;
 
@@ -327,6 +325,7 @@ void MyThreadInit (void(*start_funct)(void *), void *args){
     main_t->status = READY;
     main_t->ct_cnt = 0;
     main_t->wc_tid = -1;
+    clear_array(main_t);
     current_t = main_t;
 
     runq = setup_queue();

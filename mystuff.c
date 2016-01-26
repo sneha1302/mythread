@@ -118,15 +118,22 @@ __my_t* remove_from_queue(Queue* q, unsigned int tid) {
 void remove_refs(__my_t* t) {
     __my_t* child;
     int i;
+    printf("DEBUG: remove_refs: Removing refs to %d\n", t->tid);
     for(i = 0; i < MAX_THREADS; i++) {
         child = t->child_list[i];
         if(child != NULL) {
+            printf("DEBUG: remove_refs: removing ref in child tid %d\n", child->tid);
             child->parent = NULL;
         }
     }
 }
 
-        
+void clear_array(__my_t* t) {
+    int i; 
+    for(i = 0; i < MAX_THREADS; i++) {
+        t->child_list[i] = NULL;
+    }
+}    
 
 void print_queue(Queue* q) {
     printf("Head: %d\n", q->head);
