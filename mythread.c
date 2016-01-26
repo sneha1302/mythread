@@ -40,6 +40,7 @@ __my_t* invoking_t;
 unsigned long avail_tids[MAX_TID];
 unsigned long last_tid = 0;
 unsigned int t_cnt = 0;
+char in_main;
 
 /**************************************************************************************
  ************************************* FUNCTIONS **************************************
@@ -165,25 +166,38 @@ int MyThreadJoin(MyThread thread){
 
 void MyThreadJoinAll(void){
     printf("DEBUG: entered JoinAll\n");
+    if(current_t->ct_cnt == 0) {
+        return;
+    }
     current_t->status = WALL;
     enqueue(waitq, current_t);
     invoking_t = current_t;
     printf("DEBUG: Queued the current thread %d\n", current_t->tid);
-    while(!queue_is_empty(runq)) {
+    if(!in_main) {
         current_t = dequeue(runq);
-        if(current_t == NULL) {
-            printf("DEBUG: JoinAll: FOUND NULL FROM RUNQ!\n");
-            current_t = main_t;
-            break; // SANITY CHECK ONLY we should never hit this
-        }
-        else if(current_t->tid == MAIN_TID && queue_is_empty(runq)) {
-            return;
-        }
-        printf("DEBUG: joinAll SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
+        printf("DEBUG: JoinAll: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
         swapcontext(&(invoking_t->context), &(current_t->context));
-        if(current_t->status == EXIT) {
-            printf("DEBUG: Removing thread %d within thread %d\n", current_t->tid, invoking_t->tid);
-            free(current_t);
+    }
+    else {
+        while(!queue_is_empty(runq)) {
+            current_t = dequeue(runq);
+            if(current_t == NULL) {
+                printf("DEBUG: JoinAll: FOUND NULL FROM RUNQ!\n");
+                current_t = main_t;
+                break; // SANITY CHECK ONLY we should never hit this
+            }
+            else if(current_t->tid == MAIN_TID && queue_is_empty(runq)) {
+                return;
+            }
+            in_main = FALSE;
+            printf("DEBUG: joinAll SWAPPING!!! %d -> %d\n", main_t->tid, current_t->tid);
+            swapcontext(&(main_t->context), &(current_t->context));
+            if(current_t->status == EXIT) {
+                printf("DEBUG: Removing thread %d within thread %d\n", current_t->tid, main_t->tid);
+                free(current_t);
+                in_main = TRUE;
+                current_t = main_t;
+            }
         }
     }
 
@@ -212,16 +226,33 @@ void MyThreadExit(void){
 
 
     __my_t* parent = current_t->parent;
-    /* Remove itself from the parent's list of children */
     int i;
-    for(i = 0; i < parent->ct_cnt; i++) {
-        __my_t* ct = parent->child_list[i];
-        if(ct != NULL && ct->tid == current_t->tid) {
-            printf("DEBUG: Removed myself (%d) from parent (%d)\n", current_t->tid, parent->tid);
-            parent->child_list[i] = NULL;
-            parent->ct_cnt--;
-            break;
+    if(parent != NULL) {
+        /* Remove itself from the parent's list of children */
+        for(i = 0; i < parent->ct_cnt; i++) {
+            __my_t* ct = parent->child_list[i];
+            if(ct != NULL && ct->tid == current_t->tid) {
+                printf("DEBUG: Removed myself (%d) from parent (%d)\n", current_t->tid, parent->tid);
+                parent->child_list[i] = NULL;
+                parent->ct_cnt--;
+                break;
+            }
         }
+        /* If the parent was waiting on us, requeue parent */
+        if(parent->status == WCHLD && parent->wc_tid == current_t->tid ||
+           parent->status == WALL && parent->ct_cnt == 0) {
+               remove_from_queue(waitq, parent->tid);
+               parent->status = READY;
+               enqueue(runq, parent);
+        }
+    }
+    
+
+    if(!queue_is_empty(runq)) {
+        remove_refs(runq, current_t);
+    }
+    if(!queue_is_empty(waitq)) {
+        remove_refs(waitq, current_t);
     }
     /* Free the tid for use elsewhere */
     avail_tids[current_t->tid] = TRUE;
@@ -229,12 +260,6 @@ void MyThreadExit(void){
     /* if the parent no longer has children, and if it is WCHLD,
        then queue parent in ready */
 
-    if(parent->status == WCHLD && parent->wc_tid == current_t->tid ||
-       parent->status == WALL && parent->ct_cnt == 0) {
-           remove_from_queue(waitq, parent->tid);
-           parent->status = READY;
-           enqueue(runq, parent);
-    }
     printf("DEBUG: SWAPPING!!! %d -> %d\n", current_t->tid, main_t->tid);
     current_t->status = EXIT;
     swapcontext(&(current_t->context), &(main_t->context));
@@ -300,6 +325,7 @@ void MyThreadInit (void(*start_funct)(void *), void *args){
     runq = setup_queue();
     waitq = setup_queue();
     printf("DEBUG: Created main_t\n");
+    in_main = TRUE;
     MyThreadCreate(start_funct, args);
     MyThreadJoinAll();
     printf("DEBUG: Goodbye! :D\n");

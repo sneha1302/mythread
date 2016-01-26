@@ -57,4 +57,5 @@ int queue_length(Queue* q);
 void print_queue(Queue* q);
 __my_t* dequeue(Queue* q);
 __my_t* remove_from_queue(Queue* q, unsigned int tid);
+void remove_refs(Queue* q, __my_t* t);
 unsigned int __get_next_available_tid();

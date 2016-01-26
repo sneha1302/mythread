@@ -115,6 +115,17 @@ __my_t* remove_from_queue(Queue* q, unsigned int tid) {
     return t;
 }
 
+void remove_refs(Queue* q, __my_t* t) {
+    __my_t* child;
+    int i;
+    int j; 
+    for(i = 0; i < t->ct_cnt; i++) {
+        child = t->child_list[i];
+        child->parent = NULL;
+    }
+}
+
+        
 
 void print_queue(Queue* q) {
     printf("Head: %d\n", q->head);
