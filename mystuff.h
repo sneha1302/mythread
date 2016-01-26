@@ -32,6 +32,7 @@ typedef struct __my_t {
     struct __my_t* parent;              /* Parent thread */
     int status;                         /* -### waiting on tid ### */
     struct __my_t* child_list[MAX_THREADS];                 /* list of children processes */
+    //struct __my_t** child_list;                 /* list of children processes */
     unsigned int ct_cnt;                /* Child thread count */
     ucontext_t context;                 /* The context of this thread */
     unsigned int wc_tid;                /* tid child thread we wait on if waiting on a single child */

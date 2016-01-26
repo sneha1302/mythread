@@ -6,6 +6,12 @@
 #include "mystuff.h" /* THIS MUST BE INCLUDED AFTER mythread.h AND NOT BEFORE */
 
 
+/* TODO
+ * Need to figure out remove references without dereferencing garbage
+ * IE remove references of a child from parent and grandchild when parent
+ * and gc are alive, when both are dead, and when either one but not the other is alive
+ *
+ */
 
 /**************************************************************************************
  ********************************** GLOBAL VARIABLES **********************************
@@ -37,7 +43,7 @@ Queue* waitq;
 
 __my_t* main_t;
 __my_t* invoking_t;
-unsigned long avail_tids[MAX_TID];
+unsigned int avail_tids[MAX_TID];
 unsigned long last_tid = 0;
 unsigned int t_cnt = 0;
 char in_main;
@@ -228,16 +234,6 @@ void MyThreadExit(void){
     __my_t* parent = current_t->parent;
     int i;
     if(parent != NULL) {
-        /* Remove itself from the parent's list of children */
-        for(i = 0; i < parent->ct_cnt; i++) {
-            __my_t* ct = parent->child_list[i];
-            if(ct != NULL && ct->tid == current_t->tid) {
-                printf("DEBUG: Removed myself (%d) from parent (%d)\n", current_t->tid, parent->tid);
-                parent->child_list[i] = NULL;
-                parent->ct_cnt--;
-                break;
-            }
-        }
         /* If the parent was waiting on us, requeue parent */
         if(parent->status == WCHLD && parent->wc_tid == current_t->tid ||
            parent->status == WALL && parent->ct_cnt == 0) {
@@ -245,12 +241,23 @@ void MyThreadExit(void){
                parent->status = READY;
                enqueue(runq, parent);
         }
+        /* Remove current from the parent's list of children */
+        for(i = 0; i < parent->ct_cnt; i++) {
+            __my_t* ct = parent->child_list[i];
+            if(ct != NULL && ct->tid == current_t->tid) {
+                parent->child_list[i] = NULL;
+                parent->ct_cnt--;
+                printf("DEBUG: Removed myself (%d) from parent (%d)\n", current_t->tid, parent->tid);
+                break;
+            }
+        }
     }
     
 
     if(!queue_is_empty(runq)) {
         remove_refs(runq, current_t);
     }
+    printf("DEBUG: Exit: Removed refs\n");
     if(!queue_is_empty(waitq)) {
         remove_refs(waitq, current_t);
     }
