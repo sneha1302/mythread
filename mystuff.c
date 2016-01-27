@@ -2,141 +2,158 @@
 #include <stdlib.h>
 #include "mystuff.h"
 
-/*
-int main() {
-
-    __my_t* t1 = (__my_t*) malloc(sizeof(__my_t));
-    t1->tid = 100;
-    __my_t* t2 = (__my_t*) malloc(sizeof(__my_t));
-    t2->tid = 200;
-    Queue* queue = setup_queue();
-    printf("%d\n", queue->length);
-    enqueue(queue, t1);
-    printf("%d\n", queue->length);
-    enqueue(queue, t2);
-    printf("%d\n", queue->length);
-    __my_t* a = dequeue(queue);
-    printf("%d\n", queue->length);
-    __my_t* b = dequeue(queue);
-    printf("%d\n", queue->length);
-    printf("%d\n", a->tid);
-    printf("%d\n", b->tid);
-    enqueue(queue, t1);
-    enqueue(queue, t2);
-    __my_t* t3 = (__my_t*) malloc(sizeof(__my_t));
-    t3->tid = 300;
-    enqueue(queue, t3);
-
-    print_queue(queue);
-    __my_t* c = remove_from_queue(queue, 300);
-    printf("%d\n", c->tid);
-    a = remove_from_queue(queue, 100);
-    printf("%d\n", a->tid);
-    b = remove_from_queue(queue, 200);
-    printf("%d\n", b->tid);
-    __my_t* d = remove_from_queue(queue, 10000);
-    if(d == NULL) {
-        printf("NULL");
-    }
-    print_queue(queue);
-    */
-    //free(queue);
-    /*
-    int i;
-    for(i = 0; i < 10; i++) {
-        t1->tid = t1->tid + (10 * i);
-        t2->tid = t2->tid + (10 * i);
-        printf("i: %d\n", i);
-        enqueue(queue, t1);
-        enqueue(queue, t2);
-        a = dequeue(queue);
-        b = dequeue(queue);
-        print_queue(queue);
-        printf("%d\n", a->tid);
-        printf("%d\n", b->tid);
-    }
-    return 0;
-}
-    */
-
-
-Queue* setup_queue() {
-    Queue* q = (Queue *) malloc(sizeof(Queue));
-    q->length = 0;
-    q->head = 0;
-    q->tail = 0;
-    return q;
+int len(List* l) {
+    return l->length;
 }
 
-void enqueue(Queue* q, __my_t* t) {
-    if(queue_is_empty(q)) {
-        q->t_list[q->tail] = t;
+List* setup_list() {
+    List* to_ret = (List*) malloc(sizeof(List));
+    to_ret->head = NULL;
+    to_ret->tail = NULL;
+    to_ret->length = 0;
+    return to_ret;
+}
+
+List* setup_queue() {
+    return setup_list();
+}
+
+void enqueue(List* l, __my_t* t) {
+    Node* n = (Node*) malloc(sizeof(Node));
+    n->t = t;
+    n->next = NULL;
+
+    if(is_empty(l)) {
+        n->prev = NULL;
+        l->head = n;
+        l->tail = n;
     }
     else {
-        q->tail = (q->tail + 1) % MAX_THREADS;
-        q->t_list[q->tail] = t;
+        n->prev = l->tail;
+        l->tail->next = n;
+        l->tail = n;
     }
-    q->length++;
+    l->length++;
 }
 
-__my_t* dequeue(Queue* q) {
-    if (queue_is_empty(q)) {
+__my_t* dequeue(List* l) {
+    if(is_empty(l)) {
         return NULL;
     }
-    __my_t* t = q->t_list[q->head];
-
-    if(q->head != q->tail) {
-        q->head = (q->head + 1) % MAX_THREADS;
+    Node* to_free = l->head;
+    __my_t* t = to_free->t;
+    if(l->length == 1) {
+        l->head = NULL;
+        l->tail = NULL;
     }
-    q->length--;
+    else {
+        l->head = l->head->next;
+    }
+    free(to_free);
+    l->length--;
     return t;
 }
 
-int queue_length(Queue* q) {
-    return q->length;
+void remove_from_list(List* l, __my_t* t) {
+    unsigned int tid = t->tid;
+    //If the queue is empty, return
+    if(is_empty(l)) {
+        return;
+    }
+    Node* iterator = l->head;
+    Node* to_free;
+    //If the list has one item and we found the item to remove:
+    if(iterator->t->tid == tid) {
+        dequeue(l);
+        return;
+    }
+    //if the list has 2 or more items:
+    while(iterator != NULL && iterator->next != NULL) {
+        if(iterator->next->t->tid == tid) {
+            to_free = iterator->next;
+            iterator->next = to_free->next;
+            //If we are somewhere in the middle of the list
+            if(to_free->next != NULL) {
+                to_free->next->prev = iterator;
+            }
+            to_free->next = NULL;
+            to_free->prev = NULL;
+            to_free->t = NULL;
+            free(to_free);
+            l->length--;
+            return;
+        }
+        //continue searching for the next one
+        iterator = iterator->next;
+    }
+        
 }
 
-int queue_is_empty(Queue* q) {
-    if(queue_length(q) == 0) {
+int is_empty(List* l) {
+    if(l->length == 0) {
         return TRUE;
     }
     return FALSE;
 }
 
-__my_t* remove_from_queue(Queue* q, unsigned int tid) {
-    __my_t* t = dequeue(q);
-    if(t == NULL) {
+__my_t* peek(List* l) {
+    if(is_empty(l)) {
         return NULL;
     }
-    while(t->tid != tid) {
-        enqueue(q, t);
-        t = dequeue(q);
-    }
-    return t;
+    return l->head->t;
 }
 
-void remove_refs(__my_t* t) {
-    __my_t* child;
-    int i;
-    printf("DEBUG: remove_refs: Removing refs to %d\n", t->tid);
-    for(i = 0; i < MAX_THREADS; i++) {
-        child = t->child_list[i];
-        if(child != NULL) {
-            printf("DEBUG: remove_refs: removing ref in child tid %d\n", child->tid);
-            child->parent = NULL;
-        }
-    }
-}
+/*
+int main() {
+    List* l = setup_list();
+    Node* iterator;
+    __my_t* it;
+    __my_t* a = (__my_t*) malloc(sizeof(__my_t));
+    __my_t* b = (__my_t*) malloc(sizeof(__my_t));
+    __my_t* c = (__my_t*) malloc(sizeof(__my_t));
+    __my_t* d = (__my_t*) malloc(sizeof(__my_t));
+    int w;
+    int x;
+    int y;
+    int z;
 
-void clear_array(__my_t* t) {
-    int i; 
-    for(i = 0; i < MAX_THREADS; i++) {
-        t->child_list[i] = NULL;
-    }
-}    
+    a->tid = 1;
+    b->tid = 2;
+    c->tid = 3;
+    d->tid = 4;
 
-void print_queue(Queue* q) {
-    printf("Head: %d\n", q->head);
-    printf("Tail: %d\n", q->tail);
-    printf("Length: %d\n", q->length);
+    enqueue(l, a);
+    if(is_empty(l)) {
+        printf("Why is it empty?\n");
+    }
+    else {
+        printf("Length: %d\n", l->length);
+    }
+    printf("Head: %d, Tail: %d, Length: %d\n", l->head->t->tid, l->tail->t->tid, l->length);
+    enqueue(l, b);
+    printf("Head: %d, Tail: %d, Length: %d\n", l->head->t->tid, l->tail->t->tid, l->length);
+    enqueue(l, c);
+    printf("Head: %d, Tail: %d, Length: %d\n", l->head->t->tid, l->tail->t->tid, l->length);
+    enqueue(l, d);
+    printf("Head: %d, Tail: %d, Length: %d\n", l->head->t->tid, l->tail->t->tid, l->length);
+    iterator = l->head;
+    while(iterator != NULL) {
+        printf("Node: %d\n", iterator->t->tid);
+        iterator = iterator->next;
+    }
+    while(!is_empty(l)) {
+        it = dequeue(l);
+        if(is_empty(l)) 
+            printf("tid: %d, Head: %d, Tail: %d, Length: %d\n", it->tid, l->head, l->tail, l->length);
+        
+        else 
+            printf("tid: %d, Head: %d, Tail: %d, Length: %d\n", it->tid, l->head->t->tid, l->tail->t->tid, l->length);
+    }
+    __my_t* null = dequeue(l);
+    if(null == NULL) {
+        printf("Null\n");
+    }
+
+    return 0;
 }
+*/
