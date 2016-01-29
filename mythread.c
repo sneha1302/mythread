@@ -16,9 +16,9 @@
 /**************************************************************************************
  ********************************** GLOBAL VARIABLES **********************************
  **************************************************************************************/
-/* current_T
+/* current_t
  * After MyThreadInit, we will need to keep track of which threads put us back in this library. To
- * do so, we will simply assign it the "current" tid whenever we yield. May need to modify this as
+ * do so, we will simply assign it the "current" tid whenever we change. May need to modify this as
  * we go, but the idea is a way for us to keep track of parent ids when jumping vertically in the
  * hierarchy. -1 means the main thread.
  */
@@ -28,7 +28,7 @@ __my_t* current_t;
  * This queue will house threads that are simply waiting to run. When a thread has yielded, it gets
  * queued here. If a thread terminates, then nothing happens with the terminating thread. After
  * either, the head of this queue will be removed and ran. When I am empty, then the program has
- * finished via MyThreadExit().
+ * finished via MyThreadExit(). The main_t (see below) should never be in here.
  */
 List* runq;
 
@@ -41,11 +41,32 @@ List* runq;
  */
 List* waitq;
 
+/* main_t 
+ * Points to the "main" thread of the library. When Exit is called, we will switch this this thread
+ * to clean up the exiting and continue execution by dequeuing from the runq and run that thread.
+ */
 __my_t* main_t;
+
+/* invoking_t
+ * More of a placeholder than anything but used typically when transitioning between threads to 
+ * indicate which thread is Yielding/waiting
+ */
 __my_t* invoking_t;
+
+/* avail_tids
+ * An array to track available thread ids (TIDS). A TID is available when TRUE == avail_tids[TID] 
+ * and not available when FALSE == avail_tids[TID].
+ */
 unsigned int avail_tids[MAX_TID];
+
+/* last_tid
+ * A place holder for the last tid issued. Useful when keeping track of available tids. 
+ */
 unsigned long last_tid = 0;
-unsigned int t_cnt = 0;
+
+/* in_main
+ * A flag to help keep track if we are currently in the main thread or not. 
+ */
 char in_main;
 
 
@@ -54,15 +75,33 @@ char in_main;
  ************************************* FUNCTIONS **************************************
  **************************************************************************************/
 
-/*
- * creates the thread and puts it into ready queue
+/* MyThreadCreate
  *
+ * Desc: 
+ *   Creates a thread and enqueues the thread to the readyq. 
+ *   Though users should ball out control on threads, a limit of MAX_THREADS (default of 8192) is
+ *   placed. The only thing that will happen is a NULL is passed around. Users shouldn't need to 
+ *   dereference something in the MyThread anyway as that breaks API. Regardless, the context is
+ *   first created by getcontext, makecontext, and allocating the stack. Afterwards, the thread
+ *   container is created, the thread context is saved into the thread, and the thread is then 
+ *   enqueued into the runq. The thread is then returned (as a pointer of type MyThread).
+ * Parm:
+ *   void(*start_funct)(void *)
+ *     Pointer to the function that this thread will work 
+ *   void *args
+ *     Pointer to the list of arguments to the function this thread will work
+ * Retn:
+ *   MyThread* 
+ *     Pointer to the thread created. The internal representation of threads are via __my_t* but
+ *     the API defined requires a MyThread* so the thread is cast __my_t* -> MyThread* then 
+ *     returned
+ * Mods:
+ *   runq
+ *     The new thread is enqueued to the runq
  */
 MyThread MyThreadCreate (void(*start_funct)(void *), void *args) {
 
-    /* 
-     * Don't make another thread if we have too many! 
-     */
+    // Don't make another thread if we have too many! 
     if(runq->length == MAX_THREADS) {
         return NULL;
     }
@@ -71,175 +110,185 @@ MyThread MyThreadCreate (void(*start_funct)(void *), void *args) {
         printf("No more available TID");
         return NULL;
     }
-    /* 
-     * Setting up and creating the context 
-     */
-    //char uctx_stack[STACK_SIZE];  DO NOT USE ARRAYS WITH CONTEXTS
+
+    // Setting up and creating the context 
     ucontext_t uctx;
     getcontext(&uctx);
-    //uctx.uc_stack.ss_sp = uctx_stack;  DON'T DO IT. YOU WILL CRY BLOOD
     uctx.uc_stack.ss_sp = malloc(STACK_SIZE);
-    //uctx.uc_stack.ss_size = sizeof(uctx_stack);
     uctx.uc_stack.ss_size = STACK_SIZE;
     uctx.uc_link = &(main_t->context);
     makecontext(&uctx, start_funct, 1, args);
 
-    /* 
-     * Setting up and creating the thread 
-     */
+    // Setting up and creating the thread 
     __my_t* t = (__my_t*) malloc(sizeof(__my_t));
-    //t->tid = __get_next_available_tid();
     t->tid = tid;
     t->parent = current_t;
-    /*
-    int i;
-    for(i = 0; i < MAX_THREADS; i++) {
-        if(t->parent->child_list[i] == NULL) {
-            t->parent->child_list[i] = t;
-            break;
-        }
-    }*/
     t->child_list = setup_list();
     enqueue(t->parent->child_list, t);
     t->parent->ct_cnt = t->parent->ct_cnt + 1;
     t->status = READY;
     t->ct_cnt = 0;
     t->context = uctx;
-    //clear_array(t);
 
     enqueue(runq, t);
     return (MyThread) t;
 }
 
-/*
- * Puts the thread back on the wait queue
+/* MyThreadYield
+ *
+ * Desc:
+ *   Stops current execution and switches to the next available runnable thread. 
+ *   Upon calling Yield, the current thread's status is changed and is enqueued into the runq. The
+ *   next thread in the runq is removed and the context of the threads are switched. Returning from
+ *   this function only means that the invoking thread was dequeued from the runq. Execution should
+ *   continue after the yield was called. 
+ * Parm:
+ *   -
+ * Retn:
+ *   -
+ * Mods:
+ *   runq
+ *     . The current thread is enqueued to the runq
+ *     . The head of the runq is removed 
+ *   current_t
+ *     . The next runnable thread or main supersedes the current thread 
+ *     . The current thread is also marked as READY
+ *   invoking_t
+ *     . The current thread becomes the invoking thread. 
  */
 void MyThreadYield(void) {
-    printf("DEBUG: Entered Yield\n");
 
-    /*
-     * Change the status and enqueue to runq
-     */
+    // Change the status and enqueue to runq
     current_t->status = READY;
     enqueue(runq, current_t);
     invoking_t = current_t;
-    printf("DEBUG: Yield: Queued the current thread %d\n", current_t->tid);
-
-    /*
-     * Grab the next thread to run and mark it as such
-     */
+   
+    // Grab the next thread to run and mark it as such
     current_t = dequeue(runq); 
     if(current_t == NULL) {
-        printf("DEBUG: Yield: FOUND NULL FROM RUNQ\n");
         current_t = main_t;
         exit(1); // SANITY CHECK ONLY we should never hit this
     }
     current_t->status = RUN;
-    printf("DEBUG: Yield: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
     swapcontext(&(invoking_t->context), &(current_t->context));
 }
 
 
 
 
-/*
- * puts thread on join queue and wait for the joining thread to complete
+/* MyThreadJoin
+ *
+ * Desc:
+ *   The current thread stops execution to wait on child thread thread to terminate if the thread
+ *   is a child of the current thread.
+ *   First we check if the child exists, exiting if not. Then we next check if the child is an 
+ *   immediate child of the current thread, exiting if not. If so, then we set indicate this thread
+ *   as waiting on the child in question, enqueue this thread into the waitq, grab the next 
+ *   runnable thread and switch to that thread. 
+ * Parm:
+ *   MyThread thread
+ *     A pointer to the child thread to wait on. This must be cast to __my_t* before handling it.
+ * Retn:
+ *   0
+ *     If the child thread was an immediate child of the current thread and the child exited. 
+ *   -1
+ *     If the child does not exist (NULL) or is not an immediate child of the current thread.
+ * Mods:
+ *   current_t
+ *     The current thread's status is set to WCHLD and the tid of the child to wait on is saved
+ *     The current thread is also superseded by the next runnable thread
+ *   waitq
+ *     The current_t is appended to the waitq
+ *   runq
+ *     The next thread is removed from the runq
  */
 int MyThreadJoin(MyThread thread){
 
+    // Need to first determine if the current thread even has thread as a child or if the 
+    // child thread even exists 
     if(thread == NULL) {
         return -1;
     }
-    /*
-     * Need to first determine if the current thread even has thread as a child 
-     */
-    printf("DEBUG: Entered Join\n");
     __my_t* child_t = (__my_t*) thread;
     int found = __is_child(current_t, child_t);
-    /*
-    int i;
-    int found = FALSE; 
-    __my_t* child_t;
-    for(i = 0; i < MAX_THREADS; i++) {
-        child_t = current_t->child_list[i];
-        if(child_t != NULL && requested_t->tid == child_t->tid) {
-            found = TRUE;
-            break;
-        }
-    }
-    */
     if(!found) {
-        printf("DEBUG: Join: Did not find child\n");
         return -1;
     }
-    printf("DEBUG: Join: Found child\n");
 
-    /*
-     * Indicate which child we are now waiting on 
-     */
+    // Indicate which child we are now waiting on 
     current_t->status = WCHLD;
     current_t->wc_tid = child_t->tid;
     enqueue(waitq, current_t);
     invoking_t = current_t;
-    printf("DEBUG: Join: Queued the current thread to waitq %d\n to wait on %d\n", current_t->tid, child_t->tid);
 
-    /*
-     * Switch contexts with the next thread in the queue
-     */
+    
+    // Switch contexts with the next thread in the queue
     current_t = dequeue(runq); 
     if(current_t == NULL) {
-        printf("DEBUG: Join: FOUND NULL FROM RUNQ!\n");
         exit(1);
         // SANITY CHECK ONLY we should never hit this
     }
-    printf("DEBUG: Join: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
     swapcontext(&(invoking_t->context), &(current_t->context));
     return 0;
 }
 
-
-
-
+/* MyThreadJoinAll
+ *
+ * Desc:
+ *   Blocks execution of the current thread until all of its children exit.
+ *   We first check if we even have children. If we do, we indicate that this thread is waiting on
+ *   all its children and enqueue it to the waitq. From here, if the current thread is not the main
+ *   thread, then simply wait until the last child signals this thread that it exited. Exit() 
+ *   handles requeuing parent threads. Otherwise, if we are the main thread, simply keep looping 
+ *   until the runq is empty. While we should handle the waitq as well, currently the requirements
+ *   specify only to check if the runq is empty. When we return to this within main, we then need 
+ *   to check that the previous current thread exited, cleaning it up if so. We will always return
+ *   to the main thread in here since it should be the library's responsibility to clean exited 
+ *   threads. 
+ * Parm:
+ *   -
+ * Retn:
+ *   - 
+ * Mods:
+ *   current_t
+ *     . Changes the status to WALL to indicate waiting for all children to finish
+ *     . The next runnable thread supersedes the current thread
+ *   invoking_t
+ *     . The current thread becomes the invoking thread
+ *   in_main
+ *     . Switches back and forth from TRUE/FALSE to indicate which thread we may be in. 
+ *   runq
+ *     . We dequeue from runq to grab the next runnable thread.
+ *   waitq
+ *     . We enqueue to the waitq to wait. 
+ */
 void MyThreadJoinAll(void){
-    printf("DEBUG: entered JoinAll\n");
 
-    /*
-     * If we do not have children, then do not wait
-     */
+    // If we do not have children, then do not wait
     if(current_t->ct_cnt == 0) {
         return;
     }
 
-    /*
-     * Modify the current thread to indicate waiting for all children to complete
-     */
+    
+    // Modify the current thread to indicate waiting for all children to complete
     current_t->status = WALL;
     enqueue(waitq, current_t);
     invoking_t = current_t;
-    printf("DEBUG: Queued the current thread %d\n", current_t->tid);
 
-    /*
-     * If not in main, simply grab the next runnable thread swap
-     */
+    // If not in main, simply grab the next runnable thread swap
     if(!in_main) {
         current_t = dequeue(runq);
-        printf("DEBUG: JoinAll: SWAPPING!!! %d -> %d\n", invoking_t->tid, current_t->tid);
         swapcontext(&(invoking_t->context), &(current_t->context));
     }
 
-    /*
-     * Otherwise, we will need to spin in a loop waiting for all children to finish
-     * cleaning them up when they do finish
-     */
+    // Otherwise, we will need to spin in a loop waiting for all children to finish
+    // cleaning them up when they do finish
     else {
         while(!is_empty(runq)) {
 
-            /*
-             * Grab the next runnable thread 
-             */
+            // Grab the next runnable thread 
             current_t = dequeue(runq);
             if(current_t == NULL) {
-                printf("DEBUG: JoinAll: FOUND NULL FROM RUNQ!\n");
                 current_t = main_t;
                 break; // SANITY CHECK ONLY we should never hit this
             }
@@ -247,18 +296,12 @@ void MyThreadJoinAll(void){
                 return;
             }
 
-            /*
-             * Indicate we are about to be in a userspace thread and swap
-             */
+            // Indicate we are about to be in a userspace thread and swap
             in_main = FALSE;
-            printf("DEBUG: joinAll SWAPPING!!! %d -> %d\n", main_t->tid, current_t->tid);
             swapcontext(&(main_t->context), &(current_t->context));
 
-            /*
-             * If the thread exited, then clean it up
-             */
+            // If the thread exited, then clean it up
             if(current_t->status == EXIT) {
-                printf("DEBUG: Removing thread %d within thread %d\n", current_t->tid, main_t->tid);
                 free(current_t->child_list);
                 free(current_t);
                 in_main = TRUE;
@@ -268,56 +311,39 @@ void MyThreadJoinAll(void){
     }
 }
 
-/*
- * Exists the thread
+/* MyThreadExit
+ *
+ * Desc:
+ *   Exits the currently running thread
+ *   Frees the current thread's TID, removes all references to itself from its parent and children, 
+ *   and swaps context with the main thread so the main thread can clean this thread up. 
+ *   __remove_refs handles requeueing of parents where applicable. 
+ * Parm:
+ *   -
+ * Retn:
+ *   - This function should actually never return. 
+ * Mods:
+ *   current_t->parent
+ *     . removes the reference to the current thread from the parent
+ *   current_t->child_list
+ *     . removes all itself as the parent thread from all of its children
+ *   current_t
+ *     . sets itself as EXIT status
  */
 void MyThreadExit(void){
-    printf("DEBUG: entered Exit \n");
 
-    /*
-     * Nothing to do if we are main
-     */
+    // Nothing to do if we are main
     if(current_t->tid == MAIN_TID) {
         return;
     }
 
-    /*
-    __my_t* parent = current_t->parent;
-    int i;
-    if(parent != NULL) {
-    */
-        /* If the parent was waiting on us, requeue parent */
-    /*
-        if(parent->status == WCHLD && parent->wc_tid == current_t->tid ||
-           parent->status == WALL && parent->ct_cnt == 0) {
-               remove_from_queue(waitq, parent->tid);
-               parent->status = READY;
-               enqueue(runq, parent);
-        }
-    */
-        /* Remove current from the parent's list of children */
-    /*
-        for(i = 0; i < parent->ct_cnt; i++) {
-            __my_t* ct = parent->child_list[i];
-            if(ct != NULL && ct->tid == current_t->tid) {
-                parent->child_list[i] = NULL;
-                parent->ct_cnt--;
-                printf("DEBUG: Removed myself (%d) from parent (%d)\n", current_t->tid, parent->tid);
-                break;
-            }
-        }
-    }
-    */
-
+    // remove all references to us
     __remove_refs(current_t);
-    printf("DEBUG: Exit: Removed refs\n");
-    /* Free the tid for use elsewhere */
+
+    // Free the tid for use elsewhere 
     avail_tids[current_t->tid] = TRUE;
 
-    /* if the parent no longer has children, and if it is WCHLD,
-       then queue parent in ready */
-
-    printf("DEBUG: SWAPPING!!! %d -> %d\n", current_t->tid, main_t->tid);
+    // if the parent no longer has children, and if it is WCHLD, then queue parent in ready
     current_t->status = EXIT;
     swapcontext(&(current_t->context), &(main_t->context));
 }
@@ -345,81 +371,139 @@ int MySemaphoreDestroy(MySemaphore sem){
 // ****** CALLS ONLY FOR UNIX PROCESS ******
 // Create and run the "main" thread
 
+/* MyThreadInit
+ *
+ * Desc:
+ *   Initializes the threading engine and infrastructure
+ *   We first populate the list of available threads, then create the main thread container, 
+ *   setup the run and waitqs, then create the first thread. From there, we spin waiting on the 
+ *   runq to empty, cleaning up after ourselves upon exiting. 
+ * Parm:
+ *   void(*start_funct)(void *)
+ *     . pointer to the first function to run after setting up the thread engine
+ *   void *args 
+ *     . pointer to the list of args passed to the first function  
+ * Retn:
+ *   -
+ * Mods:
+ *   - all the things
+ */
 void MyThreadInit (void(*start_funct)(void *), void *args){
-    /* "similar to invoking MyThreadCreate immediately followed by MyThreadJoinAll"
-     * So literally just create the structures and then call MyThreadCreate on the function so that
-     * a new thread is created. From there, call MyThreadJoinAll so that all its children terminate.
-     * This will then allow it to finish.
-     */
 
-    /* PSEUDO CODE
-     *
-     * Initialize queues and thread
-     * Call MyThreadCreate with the new thread
-     * Call MyThreadJoinAll to wait for all its children thread to finish
-     */
-
-     /* Setting up queues and available tid list */
-    //runq = setup_queue();
-    //waitq = setup_queue();
+    // Setup the available tid list
     int i;
     for(i = 0; i < MAX_TID; i++) {
         avail_tids[i] = TRUE;
     }
     avail_tids[0] = FALSE;
 
-    /* Setting up the main thread. It is unecessary to call makecontext() with
-       the main thread as it is already in a function. */
+    // Setting up the main thread. It is unecessary to call {get,make}context() for
+    // the main thread as it is already in a function and has an execution context.
     main_t = (__my_t*) malloc(sizeof(__my_t));
     main_t->tid = 0;
-    //main_t->ptid = -1;
     main_t->parent = NULL;
     main_t->status = READY;
     main_t->child_list = (List*) malloc(sizeof(List));
     main_t->ct_cnt = 0;
     main_t->wc_tid = -1;
-    //clear_array(main_t);
     current_t = main_t;
 
+    // Setting up the queues
     runq = setup_queue();
     waitq = setup_queue();
-    printf("DEBUG: Created main_t\n");
     in_main = TRUE;
+
+    // Let'er rip! Begin running the first thread and spin waiting on the runq to drain
     MyThreadCreate(start_funct, args);
     MyThreadJoinAll();
-    printf("DEBUG: Goodbye! :D\n");
 
+    //Clean up
     free(runq);
     free(waitq);
     free(main_t);
 }
 
 
-/*
 
-*/
+
+/**************************************************************************************
+ ***************************** INTERNAL HELPER FUNCTIONS ******************************
+ **************************************************************************************/
+
+/* __get_next_available_tid 
+ *
+ * Desc:
+ *   Grabs the next available tid. 
+ *   Starting from the last_tid issues, we will loop until we find an available tid to hand out
+ *   wrapping back around to 1 (0 is reserved for main_t) if we overflow. 
+ * Parm:
+ *   -
+ * Retn:
+ *   int
+ *     . the next available tid
+ *   -1 
+ *     . when no tids are available 
+ * Mods:
+ *   avail_tids
+ *     . The value of the next available tid is FALSE to indicate it is now in use
+ *   last_tid
+ *     . Updated to the last issued
+ */
 unsigned int __get_next_available_tid() {
+
     int i;
     for(i = last_tid + 1; i != last_tid; i++) {
-      if(i == MAX_TID) {
-        i = 1;
-      }
+
+        // handle wrap around
+        if(i == MAX_TID) {
+            i = 1;
+        }
+
+        // if we find an available tid, mark it used and return it
         if(avail_tids[i] == TRUE) {
             avail_tids[i] = FALSE;
             last_tid = i;
             return i;
         }
     }
+
+    // none available 
     return -1;
 }
 
+
+
+/* __remove_refs
+ *
+ * Desc:
+ *   Removes all references to t from parent and children
+ *   First grabs the parent thread and removes the current thread from its child_list. Then we walk
+ *   through the list of children and remove their parent reference. For simplicity, there is not 
+ *   need to rehome the children. If the parent of this thread was waiting on us, then requeue it
+ *   into the runq. 
+ * Parm:
+ *   __my_t* t
+ *     . the thread where references to this are removed from this thread's parent and children
+ * Retn:
+ *   -
+ * Mods:
+ *   t->parent->child_list
+ *     . removes t from the parent's list of children
+ *   t->child_list->*->parent
+ *     . removes t from all of the children's parent references
+ */
 void __remove_refs(__my_t* t) {
+
+    // grab the parent of t
     __my_t* parent = t->parent;
-    //if the parent is already gone, skip to the child work
+
+    // if the parent is already gone, skip to the child work
     if(parent != NULL) {
+
+        // remove t from the parent
         remove_from_list(parent->child_list, t);
         parent->ct_cnt--;
-        printf("DEBUG: __remove_refs: removed child from parent\n");
+
         //if the parent was waiting on us, requeue to runq 
         if((parent->status == WALL && parent->ct_cnt == 0) ||
            (parent->status == WCHLD && parent->wc_tid == t->tid)) {
@@ -429,9 +513,7 @@ void __remove_refs(__my_t* t) {
             enqueue(runq, parent);
         }
     }
-    else {
-        printf("DEBUG: __remove_refs: parent of %d was null\n", t->tid);
-    }
+
     //Orphan the children
     __my_t* iterator;
     while(!is_empty(t->child_list)) {
@@ -440,6 +522,25 @@ void __remove_refs(__my_t* t) {
     }
 }
 
+/* __is_child
+ *
+ * Desc:
+ *   Determines if the child is an immediate child of parent
+ *   We walk through the parent's child_list to see if the tid of each child matches the requested
+ *   child's tid returning what we find. 
+ * Parm:
+ *   __my_t* parent
+ *     . the parent to search through
+ *   __my_t* child
+ *     . the requsted child to search for
+ * Retn:
+ *   TRUE
+ *     . if child is an immediate child of parent
+ *   FALSE
+ *     . otherwise
+ * Mods:
+ *   -
+ */
 int __is_child(__my_t* parent, __my_t* child) {
     Node* iterator = parent->child_list->head;
     while(iterator != NULL) {
@@ -450,3 +551,4 @@ int __is_child(__my_t* parent, __my_t* child) {
     }
     return FALSE;
 }
+
