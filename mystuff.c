@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include "mystuff.h"
 
+/*
+ * A library for my library ¯\_(ツ)_/¯
+ * Largely used for housing List operations
+ */
 int len(List* l) {
     return l->length;
 }
@@ -103,57 +107,3 @@ __my_t* peek(List* l) {
     return l->head->t;
 }
 
-/*
-int main() {
-    List* l = setup_list();
-    Node* iterator;
-    __my_t* it;
-    __my_t* a = (__my_t*) malloc(sizeof(__my_t));
-    __my_t* b = (__my_t*) malloc(sizeof(__my_t));
-    __my_t* c = (__my_t*) malloc(sizeof(__my_t));
-    __my_t* d = (__my_t*) malloc(sizeof(__my_t));
-    int w;
-    int x;
-    int y;
-    int z;
-
-    a->tid = 1;
-    b->tid = 2;
-    c->tid = 3;
-    d->tid = 4;
-
-    enqueue(l, a);
-    if(is_empty(l)) {
-        printf("Why is it empty?\n");
-    }
-    else {
-        printf("Length: %d\n", l->length);
-    }
-    printf("Head: %d, Tail: %d, Length: %d\n", l->head->t->tid, l->tail->t->tid, l->length);
-    enqueue(l, b);
-    printf("Head: %d, Tail: %d, Length: %d\n", l->head->t->tid, l->tail->t->tid, l->length);
-    enqueue(l, c);
-    printf("Head: %d, Tail: %d, Length: %d\n", l->head->t->tid, l->tail->t->tid, l->length);
-    enqueue(l, d);
-    printf("Head: %d, Tail: %d, Length: %d\n", l->head->t->tid, l->tail->t->tid, l->length);
-    iterator = l->head;
-    while(iterator != NULL) {
-        printf("Node: %d\n", iterator->t->tid);
-        iterator = iterator->next;
-    }
-    while(!is_empty(l)) {
-        it = dequeue(l);
-        if(is_empty(l)) 
-            printf("tid: %d, Head: %d, Tail: %d, Length: %d\n", it->tid, l->head, l->tail, l->length);
-        
-        else 
-            printf("tid: %d, Head: %d, Tail: %d, Length: %d\n", it->tid, l->head->t->tid, l->tail->t->tid, l->length);
-    }
-    __my_t* null = dequeue(l);
-    if(null == NULL) {
-        printf("Null\n");
-    }
-
-    return 0;
-}
-*/
