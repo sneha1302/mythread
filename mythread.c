@@ -69,8 +69,14 @@ unsigned long last_tid = 0;
  */
 char in_main;
 
+/* semaphores
+ * The list of semaphores. This is not guarenteed to be in a particular order. Creating new 
+ * semaphores will append a semaphore and removal should do an inplace removal.
+ */
+SList* semaphores;
 
-
+unsigned int avail_sids[MAX_SEMS];
+unsigned int last_sid = 0;
 /**************************************************************************************
  ************************************* FUNCTIONS **************************************
  **************************************************************************************/
@@ -299,12 +305,11 @@ void MyThreadJoinAll(void){
             // Indicate we are about to be in a userspace thread and swap
             in_main = FALSE;
             swapcontext(&(main_t->context), &(current_t->context));
-
+            in_main = TRUE;
             // If the thread exited, then clean it up
             if(current_t->status == EXIT) {
                 free(current_t->child_list);
                 free(current_t);
-                in_main = TRUE;
                 current_t = main_t;
             }
         }
@@ -352,20 +357,61 @@ void MyThreadExit(void){
  * abstraction for synchronization. Creates a sem
  */
 MySemaphore MySemaphoreInit(int initialValue){
+    if(!(semaphores->length < MAX_SEMS)) {
+        return NULL;
+    }
+    int sid = __get_next_available_sid();
+    if(sid == -1) {
+        return NULL;
+    }
 
+    __sem* s = (__sem*) malloc(sizeof(__sem));
+    s->waitq = (List*) malloc(sizeof(List));
+    s->val = initialValue;
+    s->sid = sid;
+    senqueue(semaphores, s);
+    return (MySemaphore) s;
 }
 
 
 void MySemaphoreSignal(MySemaphore sem){
-
+    if(sem == NULL) {
+        return;
+    }
+    __sem* s = (__sem*) sem;
+    s->val++;
+    if(s->val == 0 && !(is_empty(s->waitq))) {
+        __my_t* t = dequeue(s->waitq);
+        t->sem_wait = FALSE;
+        enqueue(runq, t);
+    }
 }
 
 
 void MySemaphoreWait(MySemaphore sem){
+    if(sem == NULL) {
+        return;
+    }
 
+    __sem* s = (__sem*) sem;
+    s->val--;
+    current_t->sem_wait = TRUE;
+    enqueue(s->waitq, current_t);
+    swapcontext(&(current_t->context), &(main_t->context));
 }
 int MySemaphoreDestroy(MySemaphore sem){
-
+    if(sem == NULL) {
+        return -1;
+    }
+    __sem* s = (__sem*) sem;
+    if(s->waitq->length != 0) {
+        return -1;
+    }
+    avail_sids[s->sid] = TRUE;
+    remove_from_slist(semaphores, s);
+    free(s->waitq);
+    free(s);
+    return 0;
 }
 
 // ****** CALLS ONLY FOR UNIX PROCESS ******
@@ -390,12 +436,16 @@ int MySemaphoreDestroy(MySemaphore sem){
  */
 void MyThreadInit (void(*start_funct)(void *), void *args){
 
-    // Setup the available tid list
+    // Setup the available tid/sid lists
     int i;
     for(i = 0; i < MAX_TID; i++) {
         avail_tids[i] = TRUE;
     }
     avail_tids[0] = FALSE;
+
+    for(i = 0; i < MAX_SEMS; i++) {
+        avail_sids[i] = TRUE;
+    }
 
     // Setting up the main thread. It is unecessary to call {get,make}context() for
     // the main thread as it is already in a function and has an execution context.
@@ -408,9 +458,10 @@ void MyThreadInit (void(*start_funct)(void *), void *args){
     main_t->wc_tid = -1;
     current_t = main_t;
 
-    // Setting up the queues
+    // Setting up the queues and semaphores 
     runq = setup_queue();
     waitq = setup_queue();
+    semaphores = setup_slist();
     in_main = TRUE;
 
     // Let'er rip! Begin running the first thread and spin waiting on the runq to drain
@@ -471,6 +522,48 @@ unsigned int __get_next_available_tid() {
     return -1;
 }
 
+
+
+/* __get_next_available_sid 
+ *
+ * Desc:
+ *   Grabs the next available sid. 
+ *   Starting from the last_sid issues, we will loop until we find an available tid to hand out
+ *   wrapping back around to 0 if we overflow. 
+ * Parm:
+ *   -
+ * Retn:
+ *   int
+ *     . the next available tid
+ *   -1 
+ *     . when no tids are available 
+ * Mods:
+ *   avail_sids
+ *     . The value of the next available sid is FALSE to indicate it is now in use
+ *   last_sid
+ *     . Updated to the last issued
+ */
+unsigned int __get_next_available_sid() {
+
+    int i;
+    for(i = last_sid + 1; i != last_sid; i++) {
+
+        // handle wrap around
+        if(i == MAX_SEMS) {
+            i = 0;
+        }
+
+        // if we find an available tid, mark it used and return it
+        if(avail_sids[i] == TRUE) {
+            avail_sids[i] = FALSE;
+            last_sid = i;
+            return i;
+        }
+    }
+
+    // none available 
+    return -1;
+}
 
 
 /* __remove_refs
